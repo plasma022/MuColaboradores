@@ -6,16 +6,17 @@
       "$path": "src/ReplicatedFirst"
     },
     "ReplicatedStorage": {
-      "$path": "src/ReplicatedStorage"
+     "Shared": {
+      "$path": "src/ReplicatedStorage/Shared"
+     }
     },
     "ServerScriptService": {
       "$path": "src/ServerScriptService"
     },
     "ServerStorage": {
-      "$path": "src/ServerStorage"
-    },
-    "StarterGui": {
-      "$path": "src/StarterGui"
+     "Scripts": {
+      "$path": "src/ServerStorage/Scripts"
+     }
     },
     "StarterPack": {
       "$path": "src/StarterPack"
