@@ -1,8 +1,8 @@
 --[[
     Archivo: ClassSelectionService.lua
     Tipo: Script
-    Ubicaci�n: ServerScriptService/
-    Descripci�n: Maneja la l�gica del servidor para la selecci�n de clases.
+    Ubicacin: ServerScriptService/
+    Descripcin: Maneja la lgica del servidor para la seleccin de clases.
 --]]
 
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -12,11 +12,12 @@ local Players = game:GetService("Players")
 local DataManager = require(ServerScriptService.PlayerDataManager)
 local Comm = require(ReplicatedStorage.Shared.Comm)
 local CharacterFormulas = require(ReplicatedStorage.Shared.CharacterFormulas)
+local StatsService = require(ServerScriptService.StatsService)
 
--- Diccionario con los datos iniciales de cada clase para una transici�n f�cil.
+-- Diccionario con los datos iniciales de cada clase para una transicin fcil.
 local CLASS_STARTING_DATA = {
 	["DarkKnight"] = {
-		-- == CORRECCI�N CLAVE: Ahora se asignan los stats con los nombres correctos ==
+		-- == CORRECCIN CLAVE: Ahora se asignan los stats con los nombres correctos ==
 		EstadisticasBase = {
 			Fuerza = CharacterFormulas.CLASS_BASE_STATS["DarkKnight"].Fuerza,
 			Agilidad = CharacterFormulas.CLASS_BASE_STATS["DarkKnight"].Agilidad,
@@ -45,7 +46,7 @@ local CLASS_STARTING_DATA = {
 	}
 }
 
--- Escuchamos el evento que env�a el cliente desde la GUI de selecci�n.
+-- Escuchamos el evento que enva el cliente desde la GUI de seleccin.
 Comm.Server:On("SelectClass", function(player, selectedClass)
 	local profile = DataManager:GetProfile(player)
 	if not profile or profile.Data.Clase ~= "Default" then
@@ -54,7 +55,7 @@ Comm.Server:On("SelectClass", function(player, selectedClass)
 
 	local classData = CLASS_STARTING_DATA[selectedClass]
 	if not classData then
-		warn("El jugador", player.Name, "intent� seleccionar una clase inv�lida:", selectedClass)
+		warn("El jugador", player.Name, "intent seleccionar una clase invlida:", selectedClass)
 		return
 	end
 
@@ -65,13 +66,14 @@ Comm.Server:On("SelectClass", function(player, selectedClass)
 	profile.Data.PuntosDeStatsDisponibles = 0
 
 	DataManager:CalculateDerivedStats(profile)
+    StatsService.sendFullStatsToClient(player)
 
 	print("[ClassSelection] El jugador", player.Name, "ha seleccionado la clase:", selectedClass)
 
 	player:LoadCharacter()
 end)
 
--- Esta funci�n revisa si el jugador necesita elegir una clase al entrar.
+-- Esta funcin revisa si el jugador necesita elegir una clase al entrar.
 local function checkPlayerClass(player)
 	print("[ClassSelection] Revisando la clase para el jugador:", player.Name)
 
@@ -79,7 +81,7 @@ local function checkPlayerClass(player)
 	local wait_cycles = 0
 
 	while not profile and wait_cycles < 10 do
-		print("[ClassSelection] El perfil de", player.Name, "no est� listo, esperando...")
+		print("[ClassSelection] El perfil de", player.Name, "no est listo, esperando...")
 		task.wait(0.5)
 		profile = DataManager:GetProfile(player)
 		wait_cycles = wait_cycles + 1
@@ -93,7 +95,7 @@ local function checkPlayerClass(player)
 	print("[ClassSelection] Perfil encontrado. La clase actual es:", profile.Data.Clase)
 
 	if profile.Data.Clase == "Default" then
-		print("[ClassSelection] La clase es 'Default'. Mostrando la GUI de selecci�n.")
+		print("[ClassSelection] La clase es 'Default'. Mostrando la GUI de seleccin.")
 		Comm.Server:Fire(player, "ShowClassSelection")
 	else
 		print("[ClassSelection] El jugador ya tiene una clase. Omitiendo GUI.")
