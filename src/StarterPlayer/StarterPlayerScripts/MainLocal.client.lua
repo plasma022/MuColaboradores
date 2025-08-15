@@ -10,12 +10,14 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 
 local Comm = require(ReplicatedStorage.Shared.Comm)
 local SkillConfig = require(ReplicatedStorage.Shared.SkillConfig)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local mouse = player:GetMouse()
 
 -- Flags y estados
 local isReadyForCombat = false
@@ -23,6 +25,10 @@ local originalWalkSpeed = 16
 local skillSlotConnections = {}
 local selectedSkill = nil
 local cameraMode = 1 -- 1: Default, 2: Locked, 3: First Person
+local rangeIndicator = nil
+local indicatorUpdateConnection = nil
+local currentTarget = nil
+local selectionBox = nil
 
 -- == OBTENER ELEMENTOS DE LA UI ==
 local mainHud = playerGui:WaitForChild("MainHudGui")
@@ -38,7 +44,7 @@ local zenText = statusUI:WaitForChild("ZenText")
 local skillBarGui = playerGui:WaitForChild("SkillBarGui")
 local skillBarFrame = skillBarGui:WaitForChild("SkillBarFrame")
 
--- == FUNCIONES DE UI Y CMARA ==
+-- == FUNCIONES DE UI, CMARA Y TARGETING ==
 local function updateBar(bar, percentage)
 	percentage = math.clamp(percentage, 0, 1)
 	local goal = UDim2.new(percentage, 0, 1, 0)
@@ -48,20 +54,108 @@ local function updateBar(bar, percentage)
 end
 
 local function updateCameraMode()
+    local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
 	if cameraMode == 1 then -- Default
 		print("[CAMARA] Modo Libre")
         workspace.CurrentCamera.CameraType = Enum.CameraType.Follow
+        workspace.CurrentCamera.CameraSubject = humanoid
 		player.CameraMode = Enum.CameraMode.Classic
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	elseif cameraMode == 2 then -- Locked
 		print("[CAMARA] Modo Bloqueado")
         workspace.CurrentCamera.CameraType = Enum.CameraType.Follow
+        workspace.CurrentCamera.CameraSubject = humanoid
 		player.CameraMode = Enum.CameraMode.Classic
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 	elseif cameraMode == 3 then -- First Person
 		print("[CAMARA] Modo Primera Persona")
 		player.CameraMode = Enum.CameraMode.LockFirstPerson
 	end
+end
+
+local function clearTarget()
+    currentTarget = nil
+    if selectionBox then
+        selectionBox.Adornee = nil
+    end
+end
+
+local function setTarget(target)
+    if not target or not target:FindFirstChildOfClass("Humanoid") then
+        clearTarget()
+        return
+    end
+    currentTarget = target
+    if not selectionBox then
+        selectionBox = Instance.new("SelectionBox")
+        selectionBox.Color3 = Color3.new(1, 0, 0)
+        selectionBox.LineThickness = 0.2
+        selectionBox.Parent = playerGui
+    end
+    selectionBox.Adornee = target
+end
+
+local function hideRangeIndicator()
+    if indicatorUpdateConnection then
+        indicatorUpdateConnection:Disconnect()
+        indicatorUpdateConnection = nil
+    end
+    if rangeIndicator then
+        rangeIndicator:Destroy()
+        rangeIndicator = nil
+    end
+end
+
+local function showRangeIndicator(skillData)
+    hideRangeIndicator()
+    if not skillData.MaxRange then return end
+
+    local character = player.Character
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+
+    local range = skillData.MaxRange
+
+    -- Usamos un Bloque que sabemos que funciona, y le ponemos el decal encima.
+    rangeIndicator = Instance.new("Part")
+    rangeIndicator.Name = "RangeIndicator"
+    rangeIndicator.Shape = Enum.PartType.Block
+    rangeIndicator.Size = Vector3.new(range * 2, 0.1, range * 2)
+    rangeIndicator.Anchored = true
+    rangeIndicator.CanCollide = false
+    rangeIndicator.Transparency = 1 -- La parte es invisible
+    rangeIndicator.Parent = workspace
+
+    local ringDecal = Instance.new("Decal")
+    ringDecal.Texture = "rbxassetid://2867595338"
+    ringDecal.Face = Enum.NormalId.Top
+    ringDecal.Color3 = Color3.fromRGB(150, 150, 150)
+    ringDecal.Transparency = 0.5
+    ringDecal.Parent = rangeIndicator
+
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {character}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+    indicatorUpdateConnection = RunService.RenderStepped:Connect(function()
+        if not rangeIndicator or not rootPart or not rootPart.Parent then
+            hideRangeIndicator()
+            return
+        end
+
+        local rayOrigin = rootPart.Position
+        local rayDirection = Vector3.new(0, -100, 0)
+
+        local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+
+        if raycastResult then
+            rangeIndicator.CFrame = CFrame.new(raycastResult.Position + Vector3.new(0, 0.1, 0))
+        else
+            rangeIndicator.Position = rootPart.Position - Vector3.new(0, rootPart.Size.Y / 2, 0)
+        end
+    end)
 end
 
 local function updateSkillBar(skills)
@@ -139,11 +233,34 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		Comm.Client:Fire("RequestBasicAttack")
 	end
 	
-	-- Clic Derecho: Usa la habilidad seleccionada
+	-- Clic Derecho: Usa la habilidad seleccionada o establece un objetivo
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
-		if selectedSkill then
-			Comm.Client:Fire("RequestSkillUse", selectedSkill)
-		end
+		if not selectedSkill then return end
+
+        local skillData = SkillConfig[selectedSkill]
+        if not skillData then return end
+
+        if skillData.TargetType == "Enemy" then
+            local target = mouse.Target
+            if target and target.Parent and target.Parent:FindFirstChildOfClass("Humanoid") and not Players:GetPlayerFromCharacter(target.Parent) then
+                setTarget(target.Parent)
+                -- Comprobar rango
+                local distance = (player.Character.PrimaryPart.Position - currentTarget.PrimaryPart.Position).Magnitude
+                if distance <= skillData.MaxRange then
+                    hideRangeIndicator()
+                    Comm.Client:Fire("RequestSkillUse", selectedSkill, currentTarget)
+                    clearTarget()
+                else
+                    print("Objetivo fuera de rango.")
+                end
+            else
+                clearTarget()
+            end
+        else
+            -- Habilidad sin objetivo
+            hideRangeIndicator()
+            Comm.Client:Fire("RequestSkillUse", selectedSkill)
+        end
 	end
 
 	-- Teclado: Selecciona la habilidad
@@ -160,8 +277,19 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			local skillSlot = skillBarFrame:FindFirstChild("SkillSlot" .. skillIndex)
 			local skillId = skillSlot and skillSlot:GetAttribute("SkillId")
 			if skillId then
-				selectedSkill = skillId
-				print("[CLIENTE] Habilidad preparada: " .. tostring(selectedSkill))
+                if selectedSkill == skillId then
+                    -- Deseleccionar si se presiona la misma tecla
+                    selectedSkill = nil
+                    hideRangeIndicator()
+                    clearTarget()
+                    print("[CLIENTE] Habilidad deseleccionada.")
+                else
+				    selectedSkill = skillId
+                    clearTarget()
+                    local skillData = SkillConfig[skillId]
+                    showRangeIndicator(skillData)
+				    print("[CLIENTE] Habilidad preparada: " .. tostring(selectedSkill))
+                end
 				-- Aqu podras aadir un efecto visual para resaltar el slot seleccionado
 			end
 		end
@@ -172,7 +300,7 @@ local StatsController = require(script.Parent.controllers.StatsController)
 StatsController:init()
 
 -- == GESTIN DE ANIMACIONES Y EVENTOS ==
-Comm.Client:On("PlayAnimation", function(animationId, timeMultiplier, actionType, actionId)
+Comm.Client:On("PlayAnimation", function(animationId, timeMultiplier, actionType, actionData)
 	local character = player.Character
 	if not character or not character:FindFirstChild("Humanoid") then return end
 	local humanoid = character.Humanoid
@@ -194,7 +322,7 @@ Comm.Client:On("PlayAnimation", function(animationId, timeMultiplier, actionType
 	local keyframeConnection
 	keyframeConnection = animationTrack.KeyframeReached:Connect(function(keyframeName)
 		if keyframeName == "Hit" then
-			Comm.Client:Fire("SkillActionTriggered", actionType, actionId)
+			Comm.Client:Fire("SkillActionTriggered", actionType, actionData)
 		elseif keyframeName == "Cast" then
 			-- Lgica para VFX de casteo
 		end

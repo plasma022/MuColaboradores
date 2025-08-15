@@ -66,20 +66,27 @@ Comm.Server:On("RequestBasicAttack", function(player)
 	end
 end)
 
-Comm.Server:On("RequestSkillUse", function(player, skillId)
-	print("[SERVER] Se solicit la habilidad: " .. tostring(skillId))
+Comm.Server:On("RequestSkillUse", function(player, skillId, target)
 	local profile = DataManager:GetProfile(player)
-	if not profile or not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 or isAttacking[player] then
+	local character = player.Character
+	if not profile or not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 or isAttacking[player] then
 		return
 	end
 
 	local skillData = SkillConfig[skillId]
-	if not skillData then 
-		print("[SERVER] Error: No se encontraron datos para el skillId: " .. tostring(skillId))
-		return 
-	end
+	if not skillData then return end
 
-	print("[SERVER] Mana actual: " .. tostring(profile.Data.CurrentMP) .. ", Coste de man: " .. tostring(skillData.ManaCost))
+    -- Validacin de objetivo
+    if skillData.TargetType == "Enemy" then
+        if not target or not target:IsA("Model") or not target:FindFirstChildOfClass("Humanoid") or not target.PrimaryPart then
+            return -- El objetivo no es vlido
+        end
+        local distance = (character.PrimaryPart.Position - target.PrimaryPart.Position).Magnitude
+        if distance > skillData.MaxRange then
+            Comm.Server:Fire(player, "ShowNotification", "Objetivo fuera de rango.")
+            return
+        end
+    end
 
 	local now = os.clock()
 	local lastUsed = skillCooldowns[player][skillId] or 0
@@ -93,34 +100,47 @@ Comm.Server:On("RequestSkillUse", function(player, skillId)
 		return
 	end
 
-	print("[SERVER] Validacin de man y cooldown superada.")
-
-	-- Actualizar estado y cooldowns
 	profile.Data.CurrentMP = profile.Data.CurrentMP - skillData.ManaCost
 	skillCooldowns[player][skillId] = now
-	print("[SERVER] Nuevo mana: " .. tostring(profile.Data.CurrentMP))
-
-	-- Notificar al cliente del cambio de stat
-	print("[SERVER] Enviando PlayerStatChanged al cliente...")
 	Comm.Server:Fire(player, "PlayerStatChanged", "CurrentMP", profile.Data.CurrentMP, profile.DerivedStats.MaxMP)
+
+    -- Encarar al objetivo si es necesario
+    if target and target.PrimaryPart then
+        local lookAtPos = target.PrimaryPart.Position
+        character:SetPrimaryPartCFrame(CFrame.new(character.PrimaryPart.Position, Vector3.new(lookAtPos.X, character.PrimaryPart.Position.Y, lookAtPos.Z)))
+    end
 
 	local timeMultiplier = profile.DerivedStats.TimeMultiplier
 	if skillData.AnimationID and skillData.AnimationID ~= "rbxassetid://" then
 		isAttacking[player] = true
-		Comm.Server:Fire(player, "PlayAnimation", skillData.AnimationID, timeMultiplier, "Skill", skillId)
+        -- Pasamos el objetivo a PlayAnimation para que se use en SkillActionTriggered
+		Comm.Server:Fire(player, "PlayAnimation", skillData.AnimationID, timeMultiplier, "Skill", {skillId = skillId, target = target})
 	else
-		print("Usando skill sin animacin:", skillId)
+		-- Lgica para skills sin animacin
 	end
 end)
 
-Comm.Server:On("SkillActionTriggered", function(player, actionType, actionId)
+Comm.Server:On("SkillActionTriggered", function(player, actionType, actionData)
 	local profile = DataManager:GetProfile(player)
 	if not profile or not player.Character then return end
 
 	if actionType == "BasicAttack" then
 		-- Lgica del hitbox para el ataque bsico...
 	elseif actionType == "Skill" then
-		-- Lgica para el dao del skill...
+        local skillId = actionData.skillId
+        local target = actionData.target
+        local skillData = SkillConfig[skillId]
+
+        if not skillData then return end
+
+        if skillData.TargetType == "Enemy" and target then
+            -- Lgica de dao para habilidad con objetivo
+            print("Aplicando dao de '"..skillId.."' al objetivo: "..target.Name)
+            -- Aqu ira la lgica de dao, AoE alrededor del target, etc.
+        else
+            -- Lgica de dao para habilidad sin objetivo (AoE alrededor del jugador, etc)
+            print("Aplicando dao de '"..skillId.."' (sin objetivo)")
+        end
 	end
 end)
 
