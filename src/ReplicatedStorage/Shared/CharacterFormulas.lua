@@ -96,4 +96,8 @@ function Formulas.calculateTimeMultiplier(attackSpeedStat)
 	return 1 / (1 + (attackSpeedStat * 0.01)) 
 end
 
+function Formulas.calculateDefense(agi)
+	return math.floor(agi / 4)
+end
+
 return Formulas

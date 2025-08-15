@@ -1,24 +1,36 @@
 --[[
     Archivo: CombatService.lua
     Tipo: Script
-    Ubicaci�n: ServerScriptService/
-    Descripci�n: Maneja toda la l�gica de combate del lado del servidor.
+    Ubicacin: ServerScriptService/
+    Descripcin: Maneja toda la lgica de combate del lado del servidor.
 --]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
-local Debris = game:GetService("Debris")
+local Players = game:GetService("Players")
 
 local DataManager = require(ServerScriptService.PlayerDataManager)
 local Comm = require(ReplicatedStorage.Shared.Comm)
 local Formulas = require(ReplicatedStorage.Shared.CharacterFormulas)
 local SkillConfig = require(ReplicatedStorage.Shared.SkillConfig)
--- local ItemConfig = require(ReplicatedStorage.Shared.ItemConfig) -- Necesitar�s un m�dulo para los datos de �tems
 
-local playerCooldowns = {}
-local isAttacking = {} -- Para evitar que los jugadores se muevan mientras atacan
+local attackCooldowns = {}
+local skillCooldowns = {}
+local isAttacking = {}
 
-local MINIMUM_ATTACK_COOLDOWN = 0.2 
+local MINIMUM_ATTACK_COOLDOWN = 0.2
+
+local function playerAdded(player)
+	isAttacking[player] = false
+	attackCooldowns[player] = 0
+	skillCooldowns[player] = {}
+end
+
+local function playerRemoving(player)
+	isAttacking[player] = nil
+	attackCooldowns[player] = nil
+	skillCooldowns[player] = nil
+end
 
 Comm.Server:On("RequestBasicAttack", function(player)
 	local profile = DataManager:GetProfile(player)
@@ -26,60 +38,78 @@ Comm.Server:On("RequestBasicAttack", function(player)
 		return
 	end
 
-	-- Validaciones de cooldown
 	local now = os.clock()
 	local baseCooldown = 1.5
 	local timeMultiplier = profile.DerivedStats.TimeMultiplier
 	local actualCooldown = math.max(MINIMUM_ATTACK_COOLDOWN, baseCooldown * timeMultiplier)
 
-	if playerCooldowns[player] and now - playerCooldowns[player] < actualCooldown then
+	if now - (attackCooldowns[player] or 0) < actualCooldown then
 		return
 	end
-	playerCooldowns[player] = now
+	attackCooldowns[player] = now
 
-	-- == L�GICA DE SELECCI�N DE ANIMACI�N ==
 	local animID
 	local equippedWeaponId = profile.Data.Equipo.Arma
 
 	if equippedWeaponId then
-		-- Aqu� necesitar�as obtener los datos del �tem desde un ItemConfig
-		-- local weaponData = ItemConfig[equippedWeaponId]
-		-- local weaponType = weaponData.Type -- "Sword", "Bow", etc.
-
-		-- *** L�gica de ejemplo hasta que tengas un ItemConfig ***
-		local weaponType = "Sword" -- Cambia esto para probar
-
+		local weaponType = "Sword" -- Placeholder
 		animID = Formulas.CLASS_BASE_STATS[profile.Data.Clase].WeaponAttackAnims[weaponType]
 	end
 
-	-- Si no se encontr� una animaci�n para el arma, usamos la por defecto.
 	if not animID then
 		animID = Formulas.DefaultAnimations.HitMelee
 	end
 
-	-- Si es v�lido, le decimos al cliente que reproduzca la animaci�n
-	if animID then
-		isAttacking[player] = true -- Bloqueamos el movimiento
+	if animID and animID ~= "rbxassetid://" then
+		isAttacking[player] = true
 		Comm.Server:Fire(player, "PlayAnimation", animID, timeMultiplier, "BasicAttack", nil)
 	end
 end)
 
 Comm.Server:On("RequestSkillUse", function(player, skillId)
+	print("[SERVER] Se solicit la habilidad: " .. tostring(skillId))
 	local profile = DataManager:GetProfile(player)
 	if not profile or not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 or isAttacking[player] then
 		return
 	end
 
 	local skillData = SkillConfig[skillId]
-	if not skillData then return end
+	if not skillData then 
+		print("[SERVER] Error: No se encontraron datos para el skillId: " .. tostring(skillId))
+		return 
+	end
 
-	-- Validaciones de Mana, Cooldown, etc.
-	-- ...
+	print("[SERVER] Mana actual: " .. tostring(profile.Data.CurrentMP) .. ", Coste de man: " .. tostring(skillData.ManaCost))
+
+	local now = os.clock()
+	local lastUsed = skillCooldowns[player][skillId] or 0
+	if now - lastUsed < skillData.BaseCooldown then
+		Comm.Server:Fire(player, "ShowNotification", "Habilidad en cooldown.")
+		return
+	end
+
+	if profile.Data.CurrentMP < skillData.ManaCost then
+		Comm.Server:Fire(player, "ShowNotification", "No tienes suficiente man.")
+		return
+	end
+
+	print("[SERVER] Validacin de man y cooldown superada.")
+
+	-- Actualizar estado y cooldowns
+	profile.Data.CurrentMP = profile.Data.CurrentMP - skillData.ManaCost
+	skillCooldowns[player][skillId] = now
+	print("[SERVER] Nuevo mana: " .. tostring(profile.Data.CurrentMP))
+
+	-- Notificar al cliente del cambio de stat
+	print("[SERVER] Enviando PlayerStatChanged al cliente...")
+	Comm.Server:Fire(player, "PlayerStatChanged", "CurrentMP", profile.Data.CurrentMP, profile.DerivedStats.MaxMP)
 
 	local timeMultiplier = profile.DerivedStats.TimeMultiplier
-	if skillData.AnimationID then
-		isAttacking[player] = true -- Bloqueamos el movimiento
+	if skillData.AnimationID and skillData.AnimationID ~= "rbxassetid://" then
+		isAttacking[player] = true
 		Comm.Server:Fire(player, "PlayAnimation", skillData.AnimationID, timeMultiplier, "Skill", skillId)
+	else
+		print("Usando skill sin animacin:", skillId)
 	end
 end)
 
@@ -88,13 +118,16 @@ Comm.Server:On("SkillActionTriggered", function(player, actionType, actionId)
 	if not profile or not player.Character then return end
 
 	if actionType == "BasicAttack" then
-		-- L�gica del hitbox para el ataque b�sico...
+		-- Lgica del hitbox para el ataque bsico...
 	elseif actionType == "Skill" then
-		-- L�gica para el da�o del skill...
+		-- Lgica para el dao del skill...
 	end
 end)
 
--- El cliente nos avisa que la animaci�n ha terminado para desbloquear al jugador.
 Comm.Server:On("AnimationFinished", function(player)
 	isAttacking[player] = false
 end)
+
+-- Conectar eventos de jugador
+Players.PlayerAdded:Connect(playerAdded)
+Players.PlayerRemoving:Connect(playerRemoving)

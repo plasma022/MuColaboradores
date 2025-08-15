@@ -36,9 +36,47 @@ function DataManager:CalculateDerivedStats(profile)
 	profile.DerivedStats.MaxHP = Formulas.calculateMaxHP(data.Clase, data.Nivel, stats.Vitalidad)
 	profile.DerivedStats.MaxMP = Formulas.calculateMaxMP(data.Clase, data.Nivel, stats.Energia)
 
+	-- Si los datos de HP/MP actuales no existen (ej. un jugador antiguo),
+	-- o si son mayores al mximo (ej. por un nerf), los ajustamos.
+	if data.CurrentHP == nil or data.CurrentHP > profile.DerivedStats.MaxHP then
+		data.CurrentHP = profile.DerivedStats.MaxHP
+	end
+	if data.CurrentMP == nil or data.CurrentMP > profile.DerivedStats.MaxMP then
+		data.CurrentMP = profile.DerivedStats.MaxMP
+	end
+
+	-- Nuevos stats derivados para la UI
+	local minDamage, maxDamage = Formulas.calculateDamageRange(data.Clase, stats.Fuerza, stats.Agilidad)
+	profile.DerivedStats.TotalDamage = string.format("%d - %d", minDamage, maxDamage)
+	profile.DerivedStats.TotalAttackSpeed = Formulas.calculateAttackSpeed(stats.Agilidad)
+	profile.DerivedStats.TotalDefense = Formulas.calculateDefense(stats.Agilidad)
+
 	local totalAgility = stats.Agilidad 
 	local attackSpeedStat = Formulas.calculateAttackSpeed(totalAgility)
 	profile.DerivedStats.TimeMultiplier = Formulas.calculateTimeMultiplier(attackSpeedStat)
+end
+
+function DataManager:GetFullStats(profile)
+	local data = profile.Data
+	local stats = data.EstadisticasBase
+	local derived = profile.DerivedStats
+
+	return {
+		Level = data.Nivel,
+		StatPoints = data.PuntosDeStatsDisponibles,
+		STR = stats.Fuerza,
+		AGI = stats.Agilidad,
+		VIT = stats.Vitalidad,
+		ENE = stats.Energia,
+		ClassName = data.Clase,
+		TotalDamage = derived.TotalDamage,
+		TotalAttackSpeed = derived.TotalAttackSpeed,
+		TotalDefense = derived.TotalDefense,
+		HP = data.CurrentHP,
+		MaxHP = derived.MaxHP,
+		MP = data.CurrentMP,
+		MaxMP = derived.MaxMP,
+	}
 end
 
 local function onPlayerAdded(player)

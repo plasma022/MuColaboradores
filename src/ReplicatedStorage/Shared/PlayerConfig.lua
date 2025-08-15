@@ -8,6 +8,10 @@
 local PlayerTemplate = {
 	ProfileVersion = 1.0,
 
+    -- Stats actuales que se guardarn
+    CurrentHP = 100,
+    CurrentMP = 50,
+
 	Clase = "Default", -- La clase inicial siempre es "Default".
 	Nivel = 1,
 	Experiencia = 0,
@@ -20,7 +24,7 @@ local PlayerTemplate = {
 		Vitalidad = 10,
 		Energia = 10,
 	},
-	PuntosDeStatsDisponibles = 0,
+	PuntosDeStatsDisponibles = 5, -- Puntos iniciales para asignar
 
 	Inventario = {},
 	Equipo = {

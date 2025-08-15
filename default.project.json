@@ -24,7 +24,7 @@
 
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",
-        "$path": "src/StarterPlayerScripts"
+        "$path": "src/StarterPlayer/StarterPlayerScripts"
       }
     }
   }
