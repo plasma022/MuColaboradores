@@ -50,15 +50,16 @@ end
 local function updateCameraMode()
 	if cameraMode == 1 then -- Default
 		print("[CAMARA] Modo Libre")
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Follow
 		player.CameraMode = Enum.CameraMode.Classic
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	elseif cameraMode == 2 then -- Locked
 		print("[CAMARA] Modo Bloqueado")
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Follow
 		player.CameraMode = Enum.CameraMode.Classic
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 	elseif cameraMode == 3 then -- First Person
 		print("[CAMARA] Modo Primera Persona")
-		-- No es necesario cambiar MouseBehavior aqu, LockFirstPerson lo gestiona
 		player.CameraMode = Enum.CameraMode.LockFirstPerson
 	end
 end

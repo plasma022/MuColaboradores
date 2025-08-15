@@ -11,21 +11,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataManager = require(ServerScriptService.PlayerDataManager)
 local Comm = require(ReplicatedStorage.Shared.Comm)
 
-local StatsService = {}
-
--- Funcin para enviar los datos completos de las estadsticas a un jugador
-function StatsService.sendFullStatsToClient(player)
-	local profile = DataManager:GetProfile(player)
-	if not profile then 
-		print("[StatsService] No se pudo enviar los stats a " .. player.Name .. " porque el perfil no fue encontrado.")
-		return 
-	end
-
-	local fullStats = DataManager:GetFullStats(profile)
-	Comm.Server:Fire(player, "UpdateStats", fullStats)
-	print("[StatsService] Stats iniciales enviados a " .. player.Name)
-end
-
 -- Funcin para asignar un punto de stat
 local function assignStatPoint(player, statName)
 	local profile = DataManager:GetProfile(player)
@@ -52,13 +37,13 @@ local function assignStatPoint(player, statName)
 	DataManager:CalculateDerivedStats(profile)
 
 	-- Enviar los stats actualizados al cliente
-	StatsService.sendFullStatsToClient(player)
+	DataManager:sendFullStatsToClient(player)
 
 	print("[StatsService] Punto asignado a " .. statName .. " para el jugador " .. player.Name)
 end
 
 -- Conectar los eventos
 Comm.Server:On("AssignStatPoint", assignStatPoint)
-Comm.Server:On("RequestInitialStats", StatsService.sendFullStatsToClient)
-
-return StatsService
+Comm.Server:On("RequestInitialStats", function(player)
+    DataManager:sendFullStatsToClient(player)
+end)

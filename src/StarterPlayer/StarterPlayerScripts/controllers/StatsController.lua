@@ -1,4 +1,4 @@
---[[
+--[[ 
     StatsController.lua
     Maneja la lgica de la UI de estadsticas del personaje.
 --]]
@@ -50,15 +50,15 @@ function StatsController:init()
         strText.Text = "Fuerza: " .. tostring(stats.STR or 0)
         agiText.Text = "Agilidad: " .. tostring(stats.AGI or 0)
         vitText.Text = "Vitalidad: " .. tostring(stats.VIT or 0)
-        eneText.Text = "Energa: " .. tostring(stats.ENE or 0)
+        eneText.Text = "Energia: " .. tostring(stats.ENE or 0)
 
         local playerClass = stats.ClassName
-        local damageType = (playerClass == "DarkWizard") and "Mgico" or "Fsico"
+        local damageType = (playerClass == "DarkWizard") and "Magico" or "Fisico"
 
-        strDesc.Text = string.format("Dao %s: %s\nVelocidad de Ataque: %s", damageType, tostring(stats.TotalDamage or 0), tostring(stats.TotalAttackSpeed or 0))
+        strDesc.Text = string.format("Daño %s: %s\nVelocidad de Ataque: %s", damageType, tostring(stats.TotalDamage or 0), tostring(stats.TotalAttackSpeed or 0))
         agiDesc.Text = "Defensa Total: " .. tostring(stats.TotalDefense or 0)
-        vitDesc.Text = string.format("Vida Mxima: %d/%d", math.floor(stats.HP or 0), math.floor(stats.MaxHP or 0))
-        eneDesc.Text = string.format("Man Mximo: %d/%d", math.floor(stats.MP or 0), math.floor(stats.MaxMP or 0))
+        vitDesc.Text = string.format("HP MAX: %d/%d", math.floor(stats.HP or 0), math.floor(stats.MaxHP or 0))
+        eneDesc.Text = string.format("MP MAX: %d/%d", math.floor(stats.MP or 0), math.floor(stats.MaxMP or 0))
 
         local hasPoints = (stats.StatPoints or 0) > 0
         strButton.Visible = hasPoints
@@ -83,6 +83,34 @@ function StatsController:init()
         if gameProcessed then return end
         if input.KeyCode == Enum.KeyCode.C then
             toggleStatsWindow()
+        end
+    end)
+
+    -- Arrastrar la ventana
+    local dragging = false
+    local dragStart
+    local startPos
+
+    statsFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = statsFrame.Position
+        end
+    end)
+
+    statsFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then
+                local delta = input.Position - dragStart
+                statsFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end
+    end)
+
+    statsFrame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
         end
     end)
 

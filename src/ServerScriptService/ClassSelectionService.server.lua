@@ -12,7 +12,6 @@ local Players = game:GetService("Players")
 local DataManager = require(ServerScriptService.PlayerDataManager)
 local Comm = require(ReplicatedStorage.Shared.Comm)
 local CharacterFormulas = require(ReplicatedStorage.Shared.CharacterFormulas)
-local StatsService = require(ServerScriptService.StatsService)
 
 -- Diccionario con los datos iniciales de cada clase para una transicin fcil.
 local CLASS_STARTING_DATA = {
@@ -66,7 +65,7 @@ Comm.Server:On("SelectClass", function(player, selectedClass)
 	profile.Data.PuntosDeStatsDisponibles = 0
 
 	DataManager:CalculateDerivedStats(profile)
-    StatsService.sendFullStatsToClient(player)
+    DataManager:sendFullStatsToClient(player)
 
 	print("[ClassSelection] El jugador", player.Name, "ha seleccionado la clase:", selectedClass)
 

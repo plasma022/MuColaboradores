@@ -15,6 +15,7 @@ local IS_STUDIO = RunService:IsStudio()
 local ProfileService = require(ServerScriptService.ProfileService)
 local PlayerConfig = require(ReplicatedStorage.Shared.PlayerConfig)
 local Formulas = require(ReplicatedStorage.Shared.CharacterFormulas)
+local Comm = require(ReplicatedStorage.Shared.Comm)
 
 local ProfileStore = ProfileService.GetProfileStore(
 	"PlayerData_v1.2",
@@ -48,11 +49,11 @@ function DataManager:CalculateDerivedStats(profile)
 	-- Nuevos stats derivados para la UI
 	local minDamage, maxDamage = Formulas.calculateDamageRange(data.Clase, stats.Fuerza, stats.Agilidad)
 	profile.DerivedStats.TotalDamage = string.format("%d - %d", minDamage, maxDamage)
-	profile.DerivedStats.TotalAttackSpeed = Formulas.calculateAttackSpeed(stats.Agilidad)
+
+	local attackSpeedStat = Formulas.calculateAttackSpeed(data.Clase, stats.Agilidad)
+	profile.DerivedStats.TotalAttackSpeed = attackSpeedStat
 	profile.DerivedStats.TotalDefense = Formulas.calculateDefense(stats.Agilidad)
 
-	local totalAgility = stats.Agilidad 
-	local attackSpeedStat = Formulas.calculateAttackSpeed(totalAgility)
 	profile.DerivedStats.TimeMultiplier = Formulas.calculateTimeMultiplier(attackSpeedStat)
 end
 
@@ -77,6 +78,18 @@ function DataManager:GetFullStats(profile)
 		MP = data.CurrentMP,
 		MaxMP = derived.MaxMP,
 	}
+end
+
+function DataManager:sendFullStatsToClient(player)
+	local profile = DataManager:GetProfile(player)
+	if not profile then 
+		print("[StatsService] No se pudo enviar los stats a " .. player.Name .. " porque el perfil no fue encontrado.")
+		return 
+	end
+
+	local fullStats = DataManager:GetFullStats(profile)
+	Comm.Server:Fire(player, "UpdateStats", fullStats)
+	print("[StatsService] Stats iniciales enviados a " .. player.Name)
 end
 
 local function onPlayerAdded(player)

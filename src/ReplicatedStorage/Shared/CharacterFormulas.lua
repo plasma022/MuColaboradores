@@ -1,8 +1,8 @@
 --[[
     Archivo: CharacterFormulas.lua
     Tipo: ModuleScript
-    Ubicaci�n: ReplicatedStorage/Shared/
-    Descripci�n: Centraliza TODOS los c�lculos matem�ticos y animaciones base del personaje.
+    Ubicacin: ReplicatedStorage/Shared/
+    Descripcin: Centraliza TODOS los clculos matemticos y animaciones base del personaje.
 --]]
 
 local Formulas = {}
@@ -12,11 +12,11 @@ Formulas.DefaultAnimations = {
 	HitMelee = "rbxassetid://80458845151117"
 }
 
--- == CORRECCI�N CLAVE: Nombres de stats estandarizados a espa�ol ==
+-- == CORRECCIN CLAVE: Nombres de stats estandarizados a espaol ==
 -- Stats y animaciones base de cada clase al Nivel 1.
 Formulas.CLASS_BASE_STATS = {
 	["DarkKnight"] = {
-		HP=79, MP=32, Fuerza=15, Agilidad=10, Vitalidad=12, Energia=5,
+		HP=79, MP=32, Fuerza=15, Agilidad=10, Vitalidad=12, Energia=5, VelocidadAtaque = 45,
 		RunAnimID = "rbxassetid://127681785238768",
 		RecoilAnimID = "rbxassetid://99256836368216",
 		DeathAnimID = "rbxassetid://104083807651488",
@@ -25,14 +25,14 @@ Formulas.CLASS_BASE_STATS = {
 		}
 	},
 	["DarkWizard"] = {
-		HP=63, MP=18, Fuerza=5, Agilidad=10, Vitalidad=8, Energia=20,
+		HP=63, MP=18, Fuerza=5, Agilidad=10, Vitalidad=8, Energia=20, VelocidadAtaque = 30,
 		RunAnimID = "rbxassetid://119542539921749",
 		RecoilAnimID = "rbxassetid://92766645817090",
 		DeathAnimID = "rbxassetid://103898651293300",
 		WeaponAttackAnims = {}
 	},
 	["FairyElf"] = {
-		HP=74, MP=30, Fuerza=10, Agilidad=15, Vitalidad=10, Energia=10,
+		HP=74, MP=30, Fuerza=10, Agilidad=15, Vitalidad=10, Energia=10, VelocidadAtaque = 35,
 		RunAnimID = "rbxassetid://120898088288165",
 		RecoilAnimID = "rbxassetid://92766645817090",
 		DeathAnimID = "rbxassetid://104083807651488",
@@ -40,6 +40,12 @@ Formulas.CLASS_BASE_STATS = {
 			Bow = "rbxassetid://129612779287723"
 		}
 	},
+}
+
+local CLASS_ATTACK_SPEED_DIVISORS = {
+    DarkKnight = 15,
+    DarkWizard = 20,
+    FairyElf = 10
 }
 
 function Formulas.calculateMaxHP(className, level, vit)
@@ -80,16 +86,21 @@ function Formulas.calculateDamageRange(className, str, agi)
 	return minDamage, maxDamage
 end
 
-function Formulas.calculateAttackSpeed(agi)
-	local speedFromAgi
-	if agi <= 2000 then
-		speedFromAgi = math.floor(agi / 20)
-	else
-		local baseSpeed = 2000 / 20
-		local extraSpeed = (agi - 2000) / 40
-		speedFromAgi = math.floor(baseSpeed + extraSpeed)
-	end
-	return speedFromAgi
+function Formulas.calculateAttackSpeed(className, agi)
+    local baseStats = Formulas.CLASS_BASE_STATS[className]
+    local divisor = CLASS_ATTACK_SPEED_DIVISORS[className]
+
+    if not baseStats or not divisor then
+        -- Valores por defecto si la clase no se encuentra
+        baseStats = Formulas.CLASS_BASE_STATS["DarkKnight"]
+        divisor = CLASS_ATTACK_SPEED_DIVISORS["DarkKnight"]
+    end
+
+    local baseSpeed = baseStats.VelocidadAtaque
+    local bonusFromAgi = math.floor(agi / divisor)
+    local itemBonus = 0 -- Placeholder para futuros bonus de items
+
+    return baseSpeed + bonusFromAgi + itemBonus
 end
 
 function Formulas.calculateTimeMultiplier(attackSpeedStat)
