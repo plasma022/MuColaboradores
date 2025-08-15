@@ -19,7 +19,7 @@ function StatsController:init()
     -- Referencias a la UI
     local statsGui = playerGui:WaitForChild("CharacterStatsGui")
     local statsFrame = statsGui:WaitForChild("StatsFrame")
-    local openStatsButton = playerGui:WaitForChild("MainHudGui"):WaitForChild("StatusUI"):WaitForChild("OpenStatsButton")
+    -- local openStatsButton = playerGui:WaitForChild("MainHudGui"):WaitForChild("StatusUI"):WaitForChild("OpenStatsButton")
 
     -- Referencias a los TextLabels de valores
     local levelText = statsFrame:WaitForChild("LevelText")
@@ -68,17 +68,17 @@ function StatsController:init()
     end
 
     -- Conectar botones
-    strButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "Fuerza") end)
-    agiButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "Agilidad") end)
-    vitButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "Vitalidad") end)
-    eneButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "Energa") end)
+    strButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "STR") end)
+    agiButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "AGI") end)
+    vitButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "VIT") end)
+    eneButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "ENE") end)
 
     -- Abrir/cerrar ventana
     local function toggleStatsWindow()
         statsGui.Enabled = not statsGui.Enabled
     end
 
-    openStatsButton.MouseButton1Click:Connect(toggleStatsWindow)
+    -- openStatsButton.MouseButton1Click:Connect(toggleStatsWindow)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
         if input.KeyCode == Enum.KeyCode.C then
@@ -89,9 +89,11 @@ function StatsController:init()
     -- Suscribirse a eventos
     Comm.Client:On("UpdateStats", updateStatsUI)
 
+    -- Pedir stats iniciales al servidor
+    Comm.Client:Fire("RequestInitialStats")
+
     -- Estado inicial
     statsGui.Enabled = false
 end
 
 return StatsController
-Controller
