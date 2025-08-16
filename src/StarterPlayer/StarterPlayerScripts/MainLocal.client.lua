@@ -15,6 +15,8 @@ local RunService = game:GetService("RunService")
 local Comm = require(ReplicatedStorage.Shared.Comm)
 local SkillConfig = require(ReplicatedStorage.Shared.SkillConfig)
 
+
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local mouse = player:GetMouse()
@@ -25,8 +27,6 @@ local originalWalkSpeed = 16
 local skillSlotConnections = {}
 local selectedSkill = nil
 local cameraMode = 1 -- 1: Default, 2: Locked, 3: First Person
-local rangeIndicator = nil
-local indicatorUpdateConnection = nil
 local currentTarget = nil
 local selectionBox = nil
 
@@ -97,66 +97,7 @@ local function setTarget(target)
     selectionBox.Adornee = target
 end
 
-local function hideRangeIndicator()
-    if indicatorUpdateConnection then
-        indicatorUpdateConnection:Disconnect()
-        indicatorUpdateConnection = nil
-    end
-    if rangeIndicator then
-        rangeIndicator:Destroy()
-        rangeIndicator = nil
-    end
-end
 
-local function showRangeIndicator(skillData)
-    hideRangeIndicator()
-    if not skillData.MaxRange then return end
-
-    local character = player.Character
-    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then return end
-
-    local range = skillData.MaxRange
-
-    -- Usamos un Bloque que sabemos que funciona, y le ponemos el decal encima.
-    rangeIndicator = Instance.new("Part")
-    rangeIndicator.Name = "RangeIndicator"
-    rangeIndicator.Shape = Enum.PartType.Block
-    rangeIndicator.Size = Vector3.new(range * 2, 0.1, range * 2)
-    rangeIndicator.Anchored = true
-    rangeIndicator.CanCollide = false
-    rangeIndicator.Transparency = 1 -- La parte es invisible
-    rangeIndicator.Parent = workspace
-
-    local ringDecal = Instance.new("Decal")
-    ringDecal.Texture = "rbxassetid://2867595338"
-    ringDecal.Face = Enum.NormalId.Top
-    ringDecal.Color3 = Color3.fromRGB(150, 150, 150)
-    ringDecal.Transparency = 0.5
-    ringDecal.Parent = rangeIndicator
-
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterDescendantsInstances = {character}
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-
-    indicatorUpdateConnection = RunService.RenderStepped:Connect(function()
-        if not rangeIndicator or not rootPart or not rootPart.Parent then
-            hideRangeIndicator()
-            return
-        end
-
-        local rayOrigin = rootPart.Position
-        local rayDirection = Vector3.new(0, -100, 0)
-
-        local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-
-        if raycastResult then
-            rangeIndicator.CFrame = CFrame.new(raycastResult.Position + Vector3.new(0, 0.1, 0))
-        else
-            rangeIndicator.Position = rootPart.Position - Vector3.new(0, rootPart.Size.Y / 2, 0)
-        end
-    end)
-end
 
 local function updateSkillBar(skills)
 	for _, connection in ipairs(skillSlotConnections) do
@@ -247,7 +188,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
                 -- Comprobar rango
                 local distance = (player.Character.PrimaryPart.Position - currentTarget.PrimaryPart.Position).Magnitude
                 if distance <= skillData.MaxRange then
-                    hideRangeIndicator()
                     Comm.Client:Fire("RequestSkillUse", selectedSkill, currentTarget)
                     clearTarget()
                 else
@@ -258,7 +198,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             end
         else
             -- Habilidad sin objetivo
-            hideRangeIndicator()
             Comm.Client:Fire("RequestSkillUse", selectedSkill)
         end
 	end
@@ -280,15 +219,12 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
                 if selectedSkill == skillId then
                     -- Deseleccionar si se presiona la misma tecla
                     selectedSkill = nil
-                    hideRangeIndicator()
                     clearTarget()
                     print("[CLIENTE] Habilidad deseleccionada.")
                 else
 				    selectedSkill = skillId
                     clearTarget()
-                    local skillData = SkillConfig[skillId]
-                    showRangeIndicator(skillData)
-				    print("[CLIENTE] Habilidad preparada: " .. tostring(selectedSkill))
+                    print("[CLIENTE] Habilidad preparada: " .. tostring(selectedSkill))
                 end
 				-- Aqu podras aadir un efecto visual para resaltar el slot seleccionado
 			end
