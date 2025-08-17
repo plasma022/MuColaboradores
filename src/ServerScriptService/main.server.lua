@@ -1,18 +1,19 @@
-local Players = game:GetService("Players")
-local ServerScriptService = game:GetService("ServerScriptService")
+--[[
+	main.server.lua
+	Punto de entrada del SERVIDOR.
+	Su única responsabilidad es encontrar y arrancar el ServiceManager.
+]]
 
-local PlayerDataManager = require(ServerScriptService.core.player_data_manager)
+print("Iniciando servidor...")
 
-local function onPlayerAdded(player)
-    print("DEBUG: onPlayerAdded en main_server_script. Player object:", player, "Name:", player and player.Name) -- Línea de depuración
-    PlayerDataManager.onPlayerAdded(player)
-end
+-- Obtenemos la referencia a las carpetas principales dentro de ServerScriptService
+local core = script.Parent.core
+local servicesFolder = script.Parent.services
 
-local function onPlayerRemoving(player)
-    PlayerDataManager.onPlayerRemoving(player)
-end
+-- Cargamos el ServiceManager desde la carpeta 'core'
+local ServiceManager = require(core.ServiceManager)
 
-Players.PlayerAdded:Connect(onPlayerAdded)
-Players.PlayerRemoving:Connect(onPlayerRemoving)
+-- Le damos la orden de iniciar todos los servicios que se encuentran en la carpeta 'services'
+ServiceManager:Start(servicesFolder)
 
-print("Main Server Script Initialized.")
+print("Servidor iniciado y todos los servicios están corriendo.")

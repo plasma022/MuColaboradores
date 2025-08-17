@@ -132,4 +132,4 @@ function DataManager:sendFullStatsToClient(player)
     end
 end
 
-return DataManager
+return PlayerDataService
