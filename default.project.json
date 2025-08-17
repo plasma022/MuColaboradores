@@ -3,9 +3,17 @@
   "tree": {
     "$className": "DataModel",
 
+    "HttpService": {
+      "$className": "HttpService",
+      "$properties": {
+        "HttpEnabled": true
+      }
+    },
+
     "ReplicatedStorage": {
-      "$path": "src/ReplicatedStorage",
-      "$ignore": ["RemotesFolder"]
+      "Shared": {
+        "$path": "src/ReplicatedStorage/Shared"
+      }
     },
 
     "ServerScriptService": {

@@ -10,7 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 -- Módulos
-local ProfileService = require(ReplicatedStorage.lib.ProfileService)
+local ProfileService = require(ReplicatedStorage.Shared.lib.ProfileService)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 -- Añade aquí los require a los configs que necesites, ej:
 -- local PlayerConfig = require(ReplicatedStorage.Shared.config.PlayerConfig)
