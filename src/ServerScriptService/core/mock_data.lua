@@ -6,7 +6,17 @@
 --]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local PlayerConfig = require(ReplicatedStorage.Shared.PlayerConfig)
+local function safeRequireShared(name)
+	local shared = ReplicatedStorage:FindFirstChild("Shared") or ReplicatedStorage:WaitForChild("Shared", 5)
+	if not shared then warn("[MockData] ReplicatedStorage.Shared no disponible") return nil end
+	local module = shared:FindFirstChild(name) or shared:WaitForChild(name, 5)
+	if not module then warn("[MockData] Módulo '"..name.."' no encontrado en Shared") return nil end
+	local ok, res = pcall(require, module)
+	if not ok then warn("[MockData] Error al require: ", res) return nil end
+	return res
+end
+
+local PlayerConfig = safeRequireShared("player_config")
 
 local function deepcopy(orig)
 	local orig_type = type(orig)
@@ -26,6 +36,10 @@ end
 local MockData = {}
 
 function MockData.LoadProfileAsync(player)
+    if not player or not player:IsA("Player") then
+        warn("[MockData] LoadProfileAsync llamado con un objeto 'player' inválido o nulo.")
+        return nil -- O un perfil vacío si es preferible
+    end
 	print("--- USANDO DATOS SIMULADOS (MOCK DATA) PARA " .. player.Name .. " ---")
 
 	local fakeProfile = {}

@@ -3,22 +3,53 @@
     Tipo: ModuleScript
     Ubicacion: ReplicatedStorage/Shared/
     Descripcion: Modulo centralizado para la comunicacion Cliente-Servidor.
+                 Gestiona la creacion y el acceso a todos los RemoteEvents.
 --]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 
-local ClientToServer = Remotes:FindFirstChild("ClientToServer") or Instance.new("RemoteEvent", Remotes)
-ClientToServer.Name = "ClientToServer"
+-- Contenedor principal para todos los eventos remotos.
+local RemotesFolder = ReplicatedStorage:FindFirstChild("RemoteEvents")
+if not RemotesFolder then
+    RemotesFolder = Instance.new("Folder")
+    RemotesFolder.Name = "RemoteEvents"
+    RemotesFolder.Parent = ReplicatedStorage
+end
 
-local ServerToClient = Remotes:FindFirstChild("ServerToClient") or Instance.new("RemoteEvent", Remotes)
-ServerToClient.Name = "ServerToClient"
+-- Función auxiliar para crear un RemoteEvent si no existe
+local function createRemote(name)
+    local remote = RemotesFolder:FindFirstChild(name)
+    if not remote then
+        remote = Instance.new("RemoteEvent")
+        remote.Name = name
+        remote.Parent = RemotesFolder
+    end
+    return remote
+end
+
+-- --- Eventos para el sistema de comunicacion general (multiplexing) ---
+local ClientToServer = createRemote("ClientToServer")
+local ServerToClient = createRemote("ServerToClient")
+
+-- --- Eventos dedicados para el sistema de Inventario ---
+createRemote("UpdateInventory")
+createRemote("EquipItem")
+createRemote("DropItemEvent")
+createRemote("UpdateClientStats")
+
+
+-- --- API del Módulo ---
 
 local serverListeners = {}
 local clientListeners = {}
 
 local Comm = {}
+
+-- Referencia directa a la carpeta de Remotes para que otros scripts puedan acceder a los eventos dedicados.
+Comm.RemotesFolder = RemotesFolder
+
+-- API para el sistema de multiplexing (si aún se necesita)
 Comm.Server = {}
 Comm.Client = {}
 
@@ -42,6 +73,7 @@ function Comm.Client:On(eventName, callback)
 	clientListeners[eventName] = callback
 end
 
+-- Conexiones para el sistema de multiplexing
 if RunService:IsServer() then
 	ClientToServer.OnServerEvent:Connect(function(player, eventName, ...)
 		if serverListeners[eventName] then

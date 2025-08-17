@@ -12,13 +12,31 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
-local Comm = require(ReplicatedStorage.Shared.Comm)
-local SkillConfig = require(ReplicatedStorage.Shared.SkillConfig)
+-- Helper seguro para require que espera al ModuleScript dentro de ReplicatedStorage.Shared
+local function safeRequireShared(moduleName)
+	local shared = ReplicatedStorage:WaitForChild("Shared", 5)
+	if not shared then
+		warn("[MainLocal] ReplicatedStorage.Shared no disponible (timeout)")
+		return nil
+	end
+	local module = shared:FindFirstChild(moduleName)
+	if not module then
+		warn("[MainLocal] Módulo '"..moduleName.."' no encontrado en ReplicatedStorage.Shared")
+		return nil
+	end
+	local ok, res = pcall(require, module)
+	if not ok then
+		warn("[MainLocal] Error al require de ", moduleName, res)
+		return nil
+	end
+	return res
+end
 
-
+local Comm = safeRequireShared("comm")
+local SkillConfig = safeRequireShared("skill_config")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local playerGui = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui", 5)
 local mouse = player:GetMouse()
 
 -- Flags y estados
@@ -31,18 +49,21 @@ local currentTarget = nil
 local selectionBox = nil
 
 -- == OBTENER ELEMENTOS DE LA UI ==
-local mainHud = playerGui:WaitForChild("MainHudGui")
-local statusUI = mainHud:WaitForChild("StatusUI")
-local healthBar = statusUI:WaitForChild("HealthBar"):WaitForChild("Bar")
-local healthText = statusUI:WaitForChild("HealthBar"):WaitForChild("HealthText")
-local manaBar = statusUI:WaitForChild("ManaBar"):WaitForChild("Bar")
-local manaText = statusUI:WaitForChild("ManaBar"):WaitForChild("ManaText")
-local expBar = statusUI:WaitForChild("ExpBar"):WaitForChild("Bar")
-local expText = statusUI:WaitForChild("ExpBar"):WaitForChild("ExpText")
-local levelText = statusUI:WaitForChild("LevelText")
-local zenText = statusUI:WaitForChild("ZenText")
-local skillBarGui = playerGui:WaitForChild("SkillBarGui")
-local skillBarFrame = skillBarGui:WaitForChild("SkillBarFrame")
+local mainHud = playerGui:FindFirstChild("MainHudGui") or playerGui:WaitForChild("MainHudGui", 5)
+local statusUI = mainHud and (mainHud:FindFirstChild("StatusUI") or mainHud:WaitForChild("StatusUI", 5))
+if not mainHud or not statusUI then
+	warn("[MainLocal] No se encontraron elementos de HUD. Algunas funcionalidades quedarán deshabilitadas hasta que el HUD esté presente.")
+end
+local healthBar = statusUI and (statusUI:FindFirstChild("HealthBar") and statusUI.HealthBar:FindFirstChild("Bar"))
+local healthText = statusUI and (statusUI:FindFirstChild("HealthBar") and statusUI.HealthBar:FindFirstChild("HealthText"))
+local manaBar = statusUI and (statusUI:FindFirstChild("ManaBar") and statusUI.ManaBar:FindFirstChild("Bar"))
+local manaText = statusUI and (statusUI:FindFirstChild("ManaBar") and statusUI.ManaBar:FindFirstChild("ManaText"))
+local expBar = statusUI and (statusUI:FindFirstChild("ExpBar") and statusUI.ExpBar:FindFirstChild("Bar"))
+local expText = statusUI and (statusUI:FindFirstChild("ExpBar") and statusUI.ExpBar:FindFirstChild("ExpText"))
+local levelText = statusUI and statusUI:FindFirstChild("LevelText")
+local zenText = statusUI and statusUI:FindFirstChild("ZenText")
+local skillBarGui = playerGui and (playerGui:FindFirstChild("SkillBarGui") or playerGui:WaitForChild("SkillBarGui", 5))
+local skillBarFrame = skillBarGui and (skillBarGui:FindFirstChild("SkillBarFrame") or skillBarGui:WaitForChild("SkillBarFrame", 5))
 
 -- == FUNCIONES DE UI, CMARA Y TARGETING ==
 local function updateBar(bar, percentage)

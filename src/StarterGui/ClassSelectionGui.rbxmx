@@ -45,7 +45,17 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
-local Comm = require(ReplicatedStorage.Shared.Comm)
+local function safeRequireShared(name)
+	local shared = ReplicatedStorage:FindFirstChild("Shared") or ReplicatedStorage:WaitForChild("Shared", 5)
+	if not shared then warn("[ClassSelectionGui] ReplicatedStorage.Shared no disponible") return nil end
+	local module = shared:FindFirstChild(name) or shared:WaitForChild(name, 5)
+	if not module then warn("[ClassSelectionGui] Módulo '"..name.."' no encontrado en Shared") return nil end
+	local ok, res = pcall(require, module)
+	if not ok then warn("[ClassSelectionGui] Error al require: ", res) return nil end
+	return res
+end
+
+local Comm = safeRequireShared("comm")
 
 local player = Players.LocalPlayer
 local gui = script.Parent
@@ -77,14 +87,22 @@ feButton.MouseButton1Click:Connect(function() updateDescription("FairyElf") end)
 
 confirmButton.MouseButton1Click:Connect(function()
 	if selectedClass then
-		Comm.Client:Fire("SelectClass", selectedClass)
+		if Comm and Comm.Client and Comm.Client.Fire then
+			Comm.Client:Fire("SelectClass", selectedClass)
+		else
+			warn("[ClassSelectionGui] Comm.Client no disponible, no se pudo enviar SelectClass")
+		end
 		gui.Enabled = false
 	end
 end)
 
-Comm.Client:On("ShowClassSelection", function()
-	gui.Enabled = true
-end)
+if Comm and Comm.Client and Comm.Client.On then
+	Comm.Client:On("ShowClassSelection", function()
+		gui.Enabled = true
+	end)
+else
+	warn("[ClassSelectionGui] Comm.Client no disponible, ShowClassSelection no registrado")
+end
 
 local function setInitialState()
 	confirmButton.Visible = false

@@ -17,7 +17,23 @@
     },
 
     "ServerScriptService": {
-      "$path": "src/ServerScriptService"
+      "$className": "ServerScriptService",
+      "$path": "src/ServerScriptService",
+      "core": {
+        "$className": "Folder",
+        "mock_data": {
+          "$path": "src/ServerScriptService/core/mock_data.lua"
+        },
+        "player_data_manager": {
+          "$path": "src/ServerScriptService/core/player_data_manager.lua"
+        }
+      },
+      "Modules": {
+        "$className": "Folder",
+        "inventory_manager": {
+          "$path": "src/ServerScriptService/Modules/inventory_manager.lua"
+        }
+      }
     },
 
     "StarterPlayer": {

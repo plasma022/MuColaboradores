@@ -8,7 +8,26 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
-local Comm = require(ReplicatedStorage.Shared.Comm)
+local function safeRequireShared(moduleName)
+    local shared = ReplicatedStorage:WaitForChild("Shared", 5)
+    if not shared then
+        warn("[StatsController] ReplicatedStorage.Shared no disponible (timeout)")
+        return nil
+    end
+    local module = shared:FindFirstChild(moduleName)
+    if not module then
+        warn("[StatsController] Módulo '"..moduleName.."' no encontrado en ReplicatedStorage.Shared")
+        return nil
+    end
+    local ok, res = pcall(require, module)
+    if not ok then
+        warn("[StatsController] Error al require de ", moduleName, res)
+        return nil
+    end
+    return res
+end
+
+local Comm = safeRequireShared("comm")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")

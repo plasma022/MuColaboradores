@@ -7,6 +7,13 @@
 
 local Formulas = {}
 
+Formulas.statNameMap = {
+	Strength = "STR",
+	Agility = "AGI",
+	Vitality = "VIT",
+	Energy = "ENE"
+}
+
 -- Animaciones por defecto que todas las clases pueden usar.
 Formulas.DefaultAnimations = {
 	HitMelee = "rbxassetid://80458845151117"

@@ -9,10 +9,70 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Players = game:GetService("Players")
 
-local DataManager = require(ServerScriptService.PlayerDataManager)
-local Comm = require(ReplicatedStorage.Shared.Comm)
-local Formulas = require(ReplicatedStorage.Shared.CharacterFormulas)
-local SkillConfig = require(ReplicatedStorage.Shared.SkillConfig)
+local function safeRequireShared(name)
+	local shared = ReplicatedStorage:FindFirstChild("Shared") or ReplicatedStorage:WaitForChild("Shared", 5)
+	if not shared then warn("[CombatService] ReplicatedStorage.Shared no disponible") return nil end
+	local module = shared:FindFirstChild(name) or shared:WaitForChild(name, 5)
+	if not module then warn("[CombatService] Módulo '"..name.."' no encontrado en Shared") return nil end
+	local ok, res = pcall(require, module)
+	if not ok then warn("[CombatService] Error al require: ", res) return nil end
+	return res
+end
+
+local function safeRequireServer(pathParts)
+	local current = ServerScriptService
+	for _, part in ipairs(pathParts) do
+		current = current:FindFirstChild(part) or current:WaitForChild(part, 5)
+		if not current then
+			warn("[CombatService] No se encontró: " .. table.concat(pathParts, "."))
+			return nil
+		end
+	end
+		if not current:IsA("ModuleScript") then
+			local targetName = pathParts[#pathParts]
+			local variants = {targetName, targetName..".server", targetName..".server.lua", targetName..".lua"}
+			local found = nil
+			for _, d in ipairs(current:GetDescendants()) do
+				if d:IsA("ModuleScript") then
+					local lname = string.lower(d.Name)
+					local ok = false
+					for _, v in ipairs(variants) do
+						if lname == string.lower(v) or string.find(lname, string.lower(v), 1, true) then ok = true break end
+					end
+					if ok then found = d break end
+				end
+			end
+			if not found then
+				for _, d in ipairs(ServerScriptService:GetDescendants()) do
+					if d:IsA("ModuleScript") then
+						local lname = string.lower(d.Name)
+						local ok = false
+						for _, v in ipairs(variants) do
+							if lname == string.lower(v) or string.find(lname, string.lower(v), 1, true) then ok = true break end
+						end
+						if ok then found = d break end
+					end
+				end
+			end
+			if found then
+				current = found
+			else
+				warn("[CombatService] Objeto encontrado no es ModuleScript: " .. tostring(current.Name))
+				return nil
+			end
+		end
+	local ok, res = pcall(require, current)
+	if not ok then warn("[CombatService] Error al require: ", res) return nil end
+	return res
+end
+
+local DataManager = safeRequireServer({"core", "player_data_manager"})
+local Comm = safeRequireShared("comm")
+local Formulas = safeRequireShared("character_formulas")
+local SkillConfig = safeRequireShared("skill_config")
+
+if not DataManager then warn("[CombatService] player_data_manager no disponible, abortando inicializacion.") return end
+if not Comm or not Comm.Server then warn("[CombatService] Comm no disponible, abortando inicializacion.") return end
 
 local attackCooldowns = {}
 local skillCooldowns = {}
