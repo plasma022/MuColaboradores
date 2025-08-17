@@ -2,7 +2,6 @@
 	CombatService.lua
 	Servicio que maneja toda la lógica de combate.
 	Procesa las solicitudes de ataque y uso de habilidades, calcula el daño y lo aplica.
-	Ubicación: ServerScriptService/services/
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,6 +16,7 @@ local CombatService = {}
 
 -- CONSTANTES
 local MINIMUM_ATTACK_COOLDOWN = 0.2
+local DEFAULT_WALKSPEED = 16
 
 -- ATRIBUTOS DEL SERVICIO
 CombatService.PlayerDataService = nil
@@ -29,36 +29,23 @@ CombatService.isAttacking = {}
 
 -- MÉTODOS
 function CombatService:Init()
-	-- No se necesita nada en la inicialización
+	-- No se necesita nada
 end
 
 function CombatService:Start(ServiceManager)
-	-- Obtenemos referencias a otros servicios
 	self.PlayerDataService = ServiceManager:GetService("PlayerDataService")
 	self.StatsService = ServiceManager:GetService("StatsService")
 
-	-- Conectamos los RemoteEvents que el cliente dispara
-	Remotes.RequestBasicAttack.OnServerEvent:Connect(function(player)
-		self:_onBasicAttack(player)
-	end)
-
-	Remotes.RequestSkillUse.OnServerEvent:Connect(function(player, skillId, target)
-		self:_onSkillUse(player, skillId, target)
-	end)
-
-	Remotes.SkillActionTriggered.OnServerEvent:Connect(function(player, actionType, actionData)
-		self:_onSkillActionTriggered(player, actionType, actionData)
-	end)
-
-	Remotes.AnimationFinished.OnServerEvent:Connect(function(player)
-		self:_onAnimationFinished(player)
-	end)
+	-- Conectamos todos los remotes que el cliente dispara
+	Remotes.RequestBasicAttack.OnServerEvent:Connect(function(player) self:_onBasicAttack(player) end)
+	Remotes.RequestSkillUse.OnServerEvent:Connect(function(player, skillId, target) self:_onSkillUse(player, skillId, target) end)
+	Remotes.SkillActionTriggered.OnServerEvent:Connect(function(player, actionType, actionData) self:_onSkillActionTriggered(player, actionType, actionData) end)
+	Remotes.AnimationFinished.OnServerEvent:Connect(function(player) self:_onAnimationFinished(player) end)
 
 	-- Conectar eventos para inicializar y limpiar datos de combate del jugador
 	Players.PlayerAdded:Connect(function(player) self:_onPlayerAdded(player) end)
 	Players.PlayerRemoving:Connect(function(player) self:_onPlayerRemoving(player) end)
 	
-	-- Inicializar para jugadores que ya están en el servidor
 	for _, player in ipairs(Players:GetPlayers()) do
 		self:_onPlayerAdded(player)
 	end
@@ -66,7 +53,6 @@ function CombatService:Start(ServiceManager)
 	print("[CombatService] Listo y escuchando peticiones de combate.")
 end
 
--- Funciones para manejar la entrada y salida de jugadores
 function CombatService:_onPlayerAdded(player)
 	self.isAttacking[player] = false
 	self.attackCooldowns[player] = 0
@@ -79,15 +65,17 @@ function CombatService:_onPlayerRemoving(player)
 	self.skillCooldowns[player] = nil
 end
 
--- Función privada para manejar un ataque básico
 function CombatService:_onBasicAttack(player)
 	local playerData = self.PlayerDataService:GetData(player)
-	if not playerData or not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 or self.isAttacking[player] then
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+	if not playerData or not humanoid or humanoid.Health <= 0 or self.isAttacking[player] then
 		return
 	end
 
 	local now = os.clock()
-	local derivedStats = self.StatsService:GetDerivedStats(player) -- Asumiendo que StatsService tiene esta función
+	local derivedStats = self.StatsService:GetDerivedStats(player)
 	local baseCooldown = 1.5
 	local timeMultiplier = derivedStats.TimeMultiplier or 1
 	local actualCooldown = math.max(MINIMUM_ATTACK_COOLDOWN, baseCooldown * timeMultiplier)
@@ -97,20 +85,22 @@ function CombatService:_onBasicAttack(player)
 	end
 	self.attackCooldowns[player] = now
 
-	local animID = CharacterFormulas.DefaultAnimations.HitMelee -- Animación por defecto
-	-- Aquí iría la lógica para obtener la animación del arma equipada
+	local animID = CharacterFormulas.DefaultAnimations.HitMelee
+	-- Aquí iría tu lógica original para obtener la animación del arma equipada
 	
 	if animID and animID ~= "rbxassetid://" then
 		self.isAttacking[player] = true
+        humanoid.WalkSpeed = 0 -- Detenemos al jugador
 		Remotes.PlayAnimation:FireClient(player, animID, timeMultiplier, "BasicAttack", nil)
 	end
 end
 
--- Función privada para manejar el uso de una habilidad
 function CombatService:_onSkillUse(player, skillId, target)
 	local playerData = self.PlayerDataService:GetData(player)
 	local character = player.Character
-	if not playerData or not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 or self.isAttacking[player] then
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+	if not playerData or not humanoid or humanoid.Health <= 0 or self.isAttacking[player] then
 		return
 	end
 
@@ -120,7 +110,7 @@ function CombatService:_onSkillUse(player, skillId, target)
 	-- Validación de objetivo
 	if skillData.TargetType == "Enemy" then
 		if not target or not target:IsA("Model") or not target:FindFirstChildOfClass("Humanoid") or not target.PrimaryPart then
-			return -- El objetivo no es válido
+			return
 		end
 		local distance = (character.PrimaryPart.Position - target.PrimaryPart.Position).Magnitude
 		if distance > skillData.MaxRange then
@@ -129,6 +119,7 @@ function CombatService:_onSkillUse(player, skillId, target)
 		end
 	end
 
+	-- Validación de Cooldown
 	local now = os.clock()
 	local lastUsed = self.skillCooldowns[player][skillId] or 0
 	if now - lastUsed < skillData.BaseCooldown then
@@ -136,16 +127,18 @@ function CombatService:_onSkillUse(player, skillId, target)
 		return
 	end
 
+	-- Validación de Maná
 	if playerData.CurrentMP < skillData.ManaCost then
 		-- Remotes.ShowNotification:FireClient(player, "No tienes suficiente maná.")
 		return
 	end
 
+	-- Consumir recursos y empezar cooldown
 	playerData.CurrentMP = playerData.CurrentMP - skillData.ManaCost
 	self.skillCooldowns[player][skillId] = now
 	Remotes.PlayerStatUpdate:FireClient(player, {CurrentMP = playerData.CurrentMP, MaxMP = playerData.MaxMP})
 
-	-- Encarar al objetivo si es necesario
+	-- Encarar al objetivo
 	if target and target.PrimaryPart then
 		local lookAtPos = target.PrimaryPart.Position
 		character:SetPrimaryPartCFrame(CFrame.new(character.PrimaryPart.Position, Vector3.new(lookAtPos.X, character.PrimaryPart.Position.Y, lookAtPos.Z)))
@@ -155,20 +148,20 @@ function CombatService:_onSkillUse(player, skillId, target)
 	local timeMultiplier = derivedStats.TimeMultiplier or 1
 	if skillData.AnimationID and skillData.AnimationID ~= "rbxassetid://" then
 		self.isAttacking[player] = true
+        humanoid.WalkSpeed = 0 -- Detenemos al jugador
 		Remotes.PlayAnimation:FireClient(player, skillData.AnimationID, timeMultiplier, "Skill", {skillId = skillId, target = target})
 	else
-		-- Lógica para skills sin animación (ej. buffs instantáneos)
+		-- Lógica para skills sin animación
 		self:_onSkillActionTriggered(player, "Skill", {skillId = skillId, target = target})
 	end
 end
 
--- Función que se llama desde la animación en el cliente
 function CombatService:_onSkillActionTriggered(player, actionType, actionData)
 	local playerData = self.PlayerDataService:GetData(player)
 	if not playerData or not player.Character then return end
 
 	if actionType == "BasicAttack" then
-		-- Lógica del hitbox para el ataque básico...
+		-- Aquí va tu lógica de hitbox para el ataque básico
 		print("Aplicando daño de ataque básico")
 	elseif actionType == "Skill" then
 		local skillId = actionData.skillId
@@ -177,7 +170,6 @@ function CombatService:_onSkillActionTriggered(player, actionType, actionData)
 		if not skillData then return end
 
 		if skillData.TargetType == "Enemy" and target then
-			-- Lógica de daño para habilidad con objetivo
 			local damage = CharacterFormulas.CalculateSkillDamage(playerData, skillData)
 			local targetHumanoid = target:FindFirstChildOfClass("Humanoid")
 			if targetHumanoid then
@@ -186,15 +178,19 @@ function CombatService:_onSkillActionTriggered(player, actionType, actionData)
 			end
 			print("Aplicando daño de '"..skillId.."' al objetivo: "..target.Name)
 		else
-			-- Lógica de daño para habilidad sin objetivo (AoE alrededor del jugador, etc)
+			-- Lógica para habilidades sin objetivo (AoE, buffs)
 			print("Aplicando efecto de '"..skillId.."' (sin objetivo)")
 		end
 	end
 end
 
--- Función que se llama cuando la animación termina en el cliente
 function CombatService:_onAnimationFinished(player)
 	self.isAttacking[player] = false
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = DEFAULT_WALKSPEED -- Restauramos la velocidad
+    end
 end
 
 return CombatService

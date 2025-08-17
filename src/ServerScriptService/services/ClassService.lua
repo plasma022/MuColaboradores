@@ -1,15 +1,14 @@
 --[[
 	ClassService.lua
-	Servicio que maneja la selección de clase de los jugadores.
-	Ubicación: ServerScriptService/services/
+	Maneja la selección de clase, escuchando cuando los datos del jugador están listos.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
 
 -- Módulos
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local ClassConfig = require(ReplicatedStorage.Shared.config.ClassConfig)
+local Signals = require(ReplicatedStorage.Shared.util.Signal)
 
 local ClassService = {}
 
@@ -20,36 +19,32 @@ ClassService.InventoryService = nil
 
 -- MÉTODOS
 function ClassService:Init()
-	-- No se necesita nada en la inicialización
+	-- No se necesita nada
 end
 
 function ClassService:Start(ServiceManager)
-	-- Obtenemos referencias a otros servicios
 	self.PlayerDataService = ServiceManager:GetService("PlayerDataService")
 	self.StatsService = ServiceManager:GetService("StatsService")
 	self.InventoryService = ServiceManager:GetService("InventoryService")
 
-	-- Conectamos el RemoteEvent para que el cliente pueda solicitar elegir una clase
 	Remotes.SelectClass.OnServerEvent:Connect(function(player, classId)
 		self:_onSelectClass(player, classId)
 	end)
 
-	-- CORRECCIÓN: Ya no revisamos la clase cuando el jugador entra.
-	-- Esperamos la notificación del PlayerDataService.
+	-- Nos conectamos a la señal para saber cuándo actuar.
+	Signals:Connect(function(eventName, player, playerData)
+		if eventName == "PlayerDataLoaded" then
+			self:_checkPlayerClass(player, playerData)
+		end
+	end)
 
-	print("[ClassService] Listo y escuchando peticiones de selección de clase.")
+	print("[ClassService] Listo y escuchando peticiones.")
 end
 
--- CORRECCIÓN: Nueva función que es llamada por PlayerDataService cuando los datos están listos.
-function ClassService:OnPlayerDataLoaded(player)
-	local playerData = self.PlayerDataService:GetData(player)
+-- Esta función ahora es llamada por la señal
+function ClassService:_checkPlayerClass(player, playerData)
+	if not playerData then return end
 
-	if not playerData then
-		warn(`[ClassService] No se pudo revisar la clase para {player.Name} porque no se encontraron sus datos.`)
-		return
-	end
-
-	-- Si la clase es nil o "Default", le pedimos al cliente que muestre la UI de selección
 	if not playerData.Clase or playerData.Clase == "Default" then
 		print(`[ClassService] El jugador {player.Name} necesita elegir una clase.`)
 		Remotes.ShowClassSelection:FireClient(player)
@@ -58,22 +53,13 @@ function ClassService:OnPlayerDataLoaded(player)
 	end
 end
 
-
 -- Función privada que se ejecuta cuando un jugador elige una clase
 function ClassService:_onSelectClass(player, classId)
 	local playerData = self.PlayerDataService:GetData(player)
-	if not playerData then return end
-
-	if playerData.Clase and playerData.Clase ~= "Default" then
-		warn(`[ClassService] El jugador {player.Name} intentó elegir una clase teniendo ya una.`)
-		return
-	end
+	if not playerData or (playerData.Clase and playerData.Clase ~= "Default") then return end
 
 	local classData = ClassConfig[classId]
-	if not classData then
-		warn(`[ClassService] El jugador {player.Name} intentó elegir una clase inexistente: {classId}`)
-		return
-	end
+	if not classData then return end
 
 	playerData.Clase = classId
 	playerData.EstadisticasBase = classData.BaseStats
@@ -92,7 +78,6 @@ function ClassService:_onSelectClass(player, classId)
 	Remotes.PlayerStatUpdate:FireClient(player, playerData)
 	
 	print(`[ClassService] El jugador {player.Name} ha elegido la clase: {classId}`)
-	
 	player:LoadCharacter()
 end
 

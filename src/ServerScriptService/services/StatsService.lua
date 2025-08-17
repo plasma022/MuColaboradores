@@ -9,7 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Módulos
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
-local CharacterFormulas = require(ReplicatedStorage.Shared.util.character_formulas) -- Asumiendo que tienes este módulo
+local CharacterFormulas = require(ReplicatedStorage.Shared.util.character_formulas)
 
 local StatsService = {}
 
@@ -38,17 +38,12 @@ function StatsService:_onAssignStatPoint(player, statToIncrease)
 	local playerData = self.PlayerDataService:GetData(player)
 	if not playerData then return {success = false, message = "No se encontraron datos del jugador."} end
 
-	if playerData.StatPoints > 0 then
-		-- Verificamos que el stat que se quiere subir es válido (STR, AGI, VIT, ENE)
-		if playerData.Stats[statToIncrease] then
-			playerData.StatPoints = playerData.StatPoints - 1
-			playerData.Stats[statToIncrease] = playerData.Stats[statToIncrease] + 1
+	if playerData.PuntosDeStatsDisponibles > 0 then
+		if playerData.EstadisticasBase[statToIncrease] then
+			playerData.PuntosDeStatsDisponibles = playerData.PuntosDeStatsDisponibles - 1
+			playerData.EstadisticasBase[statToIncrease] = playerData.EstadisticasBase[statToIncrease] + 1
 
-			-- Después de cambiar un stat base, recalculamos los stats derivados
 			self:RecalculateDerivedStats(player)
-
-			-- Notificamos al cliente que la asignación fue exitosa
-			-- El cliente debería tener un listener para este evento y actualizar la UI
 			Remotes.PlayerStatUpdate:FireClient(player, playerData)
 			
 			return {success = true, message = "Punto asignado correctamente."}
@@ -63,32 +58,31 @@ end
 -- Función pública para recalcular todos los stats de un jugador (HP, MP, Daño, etc.)
 function StatsService:RecalculateDerivedStats(player)
 	local playerData = self.PlayerDataService:GetData(player)
-	if not playerData then return end
+	if not playerData or not playerData.EstadisticasBase then return end
 
-	local stats = playerData.Stats
+	local stats = playerData.EstadisticasBase
 	
-	-- Usamos las fórmulas del módulo compartido para los cálculos
-	playerData.MaxHP = CharacterFormulas.CalculateMaxHP(playerData.Nivel, stats.VIT)
-	playerData.MaxMP = CharacterFormulas.CalculateMaxMP(playerData.Nivel, stats.ENE)
+	-- CORRECCIÓN: Se cambiaron los nombres de las funciones a minúscula para que coincidan con el módulo de fórmulas.
+	playerData.MaxHP = CharacterFormulas.calculateMaxHP(playerData.Clase, playerData.Nivel, stats.Vitalidad)
+	playerData.MaxMP = CharacterFormulas.calculateMaxMP(playerData.Clase, playerData.Nivel, stats.Energia)
 	
-	-- Asegurarnos de que la vida/maná actual no supere el nuevo máximo
-	playerData.CurrentHP = math.min(playerData.CurrentHP, playerData.MaxHP)
-	playerData.CurrentMP = math.min(playerData.CurrentMP, playerData.MaxMP)
-
-	-- Aquí irían más cálculos: Defensa, Daño Mínimo/Máximo, Velocidad de Ataque, etc.
-	-- playerData.Defense = CharacterFormulas.CalculateDefense(stats.AGI)
-	-- playerData.MinDamage, playerData.MaxDamage = CharacterFormulas.CalculateDamage(stats.STR)
+	-- Al recalcular, la vida y el maná se restauran al máximo.
+	playerData.CurrentHP = playerData.MaxHP
+	playerData.CurrentMP = playerData.MaxMP
 
 	print(`[StatsService] Stats recalculados para {player.Name}`)
 end
 
--- Función pública para obtener un stat específico de un jugador
-function StatsService:GetStat(player, statName)
+-- Función que el CombatService necesita.
+function StatsService:GetDerivedStats(player)
 	local playerData = self.PlayerDataService:GetData(player)
-	if playerData and playerData.Stats[statName] then
-		return playerData.Stats[statName]
-	end
-	return nil
+	if not playerData then return {} end
+	
+	-- Aquí irían los cálculos para stats como velocidad de ataque, defensa, etc.
+	-- Por ahora, devolvemos una tabla simple.
+	return {
+		TimeMultiplier = 1 -- Placeholder
+	}
 end
 
 return StatsService

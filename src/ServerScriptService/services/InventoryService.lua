@@ -6,10 +6,11 @@
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService") -- <-- LÍNEA AÑADIDA
 
 -- Módulos
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
-local ItemConfig = require(ReplicatedStorage.Shared.config.ItemConfig) -- Asumiendo que tienes este módulo
+local ItemConfig = require(ReplicatedStorage.Shared.config.ItemConfig)
 
 local InventoryService = {}
 
