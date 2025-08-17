@@ -8,10 +8,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Buscamos o creamos una carpeta para guardar los objetos Remote y mantener el explorador limpio
-local remotesFolder = ReplicatedStorage:FindFirstChild("RemotesFolder")
+local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
 if not remotesFolder then
 	remotesFolder = Instance.new("Folder")
-	remotesFolder.Name = "RemotesFolder"
+	remotesFolder.Name = "Remotes"
 	remotesFolder.Parent = ReplicatedStorage
 end
 
@@ -30,12 +30,20 @@ local function getOrCreate(className, name)
 end
 
 -- Definimos TODOS los remotes del juego en un solo lugar.
--- Esta tabla será el "diccionario" de comunicación entre cliente y servidor.
 return {
-	-- Eventos (Cliente -> Servidor o Servidor -> Cliente)
+	-- Eventos Servidor -> Cliente
+	PlayerStatUpdate = getOrCreate("RemoteEvent", "PlayerStatUpdate"),
 	InventoryUpdated = getOrCreate("RemoteEvent", "InventoryUpdated"),
+	PlayAnimation = getOrCreate("RemoteEvent", "PlayAnimation"),
+	ShowClassSelection = getOrCreate("RemoteEvent", "ShowClassSelection"),
+
+	-- Eventos Cliente -> Servidor
 	EquipItem = getOrCreate("RemoteEvent", "EquipItem"),
-    PlayerStatUpdate = getOrCreate("RemoteEvent", "PlayerStatUpdate"),
+	SelectClass = getOrCreate("RemoteEvent", "SelectClass"),
+	RequestBasicAttack = getOrCreate("RemoteEvent", "RequestBasicAttack"),
+	RequestSkillUse = getOrCreate("RemoteEvent", "RequestSkillUse"),
+	SkillActionTriggered = getOrCreate("RemoteEvent", "SkillActionTriggered"),
+	AnimationFinished = getOrCreate("RemoteEvent", "AnimationFinished"),
 
 	-- Funciones (Cliente pide datos -> Servidor responde)
 	AssignStatPoint = getOrCreate("RemoteFunction", "AssignStatPoint"),
