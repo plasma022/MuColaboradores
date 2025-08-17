@@ -1,146 +1,99 @@
---[[ 
-    StatsController.lua
-    Maneja la lgica de la UI de estadsticas del personaje.
---]]
+--[[
+	StatsController.lua
+	Controla la lógica de la interfaz de usuario de estadísticas del personaje (CharacterStatsGui).
+	Ubicación: StarterPlayer/StarterPlayerScripts/controllers/
+]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 
-local function safeRequireShared(moduleName)
-    local shared = ReplicatedStorage:WaitForChild("Shared", 5)
-    if not shared then
-        warn("[StatsController] ReplicatedStorage.Shared no disponible (timeout)")
-        return nil
-    end
-    local module = shared:FindFirstChild(moduleName)
-    if not module then
-        warn("[StatsController] Módulo '"..moduleName.."' no encontrado en ReplicatedStorage.Shared")
-        return nil
-    end
-    local ok, res = pcall(require, module)
-    if not ok then
-        warn("[StatsController] Error al require de ", moduleName, res)
-        return nil
-    end
-    return res
-end
-
-local Comm = safeRequireShared("comm")
+-- Módulos y Remotes
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+-- Referencias a la UI de Stats
+local statsGui = playerGui:WaitForChild("CharacterStatsGui")
+local statsFrame = statsGui:WaitForChild("StatsFrame")
+local pointsLabel = statsFrame:WaitForChild("PointsAvailableText")
+local levelLabel = statsFrame:WaitForChild("LevelText")
+
+-- Labels de cada stat
+local strLabel = statsFrame:WaitForChild("STR_Text")
+local agiLabel = statsFrame:WaitForChild("AGI_Text")
+local vitLabel = statsFrame:WaitForChild("VIT_Text")
+local eneLabel = statsFrame:WaitForChild("ENE_Text")
+
+-- Botones para añadir stats
+local strButton = statsFrame:WaitForChild("STR_Button")
+local agiButton = statsFrame:WaitForChild("AGI_Button")
+local vitButton = statsFrame:WaitForChild("VIT_Button")
+local eneButton = statsFrame:WaitForChild("ENE_Button")
+
 local StatsController = {}
 
-function StatsController:init()
-    -- Referencias a la UI
-    local statsGui = playerGui:WaitForChild("CharacterStatsGui")
-    local statsFrame = statsGui:WaitForChild("StatsFrame")
-    -- local openStatsButton = playerGui:WaitForChild("MainHudGui"):WaitForChild("StatusUI"):WaitForChild("OpenStatsButton")
+-- Función para actualizar toda la información en la UI
+local function updateStatsUI(playerData)
+	if not playerData then return end
 
-    -- Referencias a los TextLabels de valores
-    local levelText = statsFrame:WaitForChild("LevelText")
-    local pointsText = statsFrame:WaitForChild("PointsAvailableText")
-    local strText = statsFrame:WaitForChild("STR_Text")
-    local agiText = statsFrame:WaitForChild("AGI_Text")
-    local vitText = statsFrame:WaitForChild("VIT_Text")
-    local eneText = statsFrame:WaitForChild("ENE_Text")
+	pointsLabel.Text = "Puntos: " .. tostring(playerData.PuntosDeStatsDisponibles or 0)
+	levelLabel.Text = "Nivel: " .. tostring(playerData.Nivel or 1)
 
-    -- Referencias a los TextLabels de descripciones
-    local strDesc = statsFrame:WaitForChild("STR_Desc")
-    local agiDesc = statsFrame:WaitForChild("AGI_Desc")
-    local vitDesc = statsFrame:WaitForChild("VIT_Desc")
-    local eneDesc = statsFrame:WaitForChild("ENE_Desc")
+	local baseStats = playerData.EstadisticasBase
+	if baseStats then
+		strLabel.Text = "Fuerza: " .. tostring(baseStats.Fuerza or 0)
+		agiLabel.Text = "Agilidad: " .. tostring(baseStats.Agilidad or 0)
+		vitLabel.Text = "Vitalidad: " .. tostring(baseStats.Vitalidad or 0)
+		eneLabel.Text = "Energía: " .. tostring(baseStats.Energia or 0)
+	end
+	
+	-- Habilitar o deshabilitar los botones si hay puntos disponibles
+	local hasPoints = (playerData.PuntosDeStatsDisponibles or 0) > 0
+	strButton.Visible = hasPoints
+	agiButton.Visible = hasPoints
+	vitButton.Visible = hasPoints
+	eneButton.Visible = hasPoints
+end
 
-    -- Referencias a los Botones
-    local strButton = statsFrame:WaitForChild("STR_Button")
-    local agiButton = statsFrame:WaitForChild("AGI_Button")
-    local vitButton = statsFrame:WaitForChild("VIT_Button")
-    local eneButton = statsFrame:WaitForChild("ENE_Button")
+-- Función para asignar un punto
+local function assignPoint(statName)
+	-- Deshabilitamos los botones para evitar doble click
+	strButton.Interactable = false
+	agiButton.Interactable = false
+	vitButton.Interactable = false
+	eneButton.Interactable = false
 
-    -- Funcin para actualizar la UI
-    local function updateStatsUI(stats)
-        if not stats then return end
+	-- Llamamos al servidor
+	local result = Remotes.AssignStatPoint:InvokeServer(statName)
+	
+	if result and not result.success then
+		warn("No se pudo asignar el punto de stat: " .. result.message)
+	end
 
-        levelText.Text = "Nivel: " .. tostring(stats.Level or 1)
-        pointsText.Text = "Puntos Disponibles: " .. tostring(stats.StatPoints or 0)
-        strText.Text = "Fuerza: " .. tostring(stats.STR or 0)
-        agiText.Text = "Agilidad: " .. tostring(stats.AGI or 0)
-        vitText.Text = "Vitalidad: " .. tostring(stats.VIT or 0)
-        eneText.Text = "Energia: " .. tostring(stats.ENE or 0)
+	-- Rehabilitamos los botones
+	strButton.Interactable = true
+	agiButton.Interactable = true
+	vitButton.Interactable = true
+	eneButton.Interactable = true
+end
 
-        local playerClass = stats.ClassName
-        local damageType = (playerClass == "DarkWizard") and "Magico" or "Fisico"
+function StatsController:Start()
+	-- Conectar los botones
+	strButton.MouseButton1Click:Connect(function() assignPoint("Fuerza") end)
+	agiButton.MouseButton1Click:Connect(function() assignPoint("Agilidad") end)
+	vitButton.MouseButton1Click:Connect(function() assignPoint("Vitalidad") end)
+	eneButton.MouseButton1Click:Connect(function() assignPoint("Energia") end)
 
-        strDesc.Text = string.format("Daño %s: %s\nVelocidad de Ataque: %s", damageType, tostring(stats.TotalDamage or 0), tostring(stats.TotalAttackSpeed or 0))
-        agiDesc.Text = "Defensa Total: " .. tostring(stats.TotalDefense or 0)
-        vitDesc.Text = string.format("HP MAX: %d/%d", math.floor(stats.HP or 0), math.floor(stats.MaxHP or 0))
-        eneDesc.Text = string.format("MP MAX: %d/%d", math.floor(stats.MP or 0), math.floor(stats.MaxMP or 0))
+	-- Escuchar las actualizaciones de datos del servidor
+	Remotes.PlayerStatUpdate.OnClientEvent:Connect(updateStatsUI)
 
-        local hasPoints = (stats.StatPoints or 0) > 0
-        strButton.Visible = hasPoints
-        agiButton.Visible = hasPoints
-        vitButton.Visible = hasPoints
-        eneButton.Visible = hasPoints
-    end
+	print("[StatsController] Iniciado.")
+end
 
-    -- Conectar botones
-    strButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "STR") end)
-    agiButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "AGI") end)
-    vitButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "VIT") end)
-    eneButton.MouseButton1Click:Connect(function() Comm.Client:Fire("AssignStatPoint", "ENE") end)
-
-    -- Abrir/cerrar ventana
-    local function toggleStatsWindow()
-        statsGui.Enabled = not statsGui.Enabled
-    end
-
-    -- openStatsButton.MouseButton1Click:Connect(toggleStatsWindow)
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        if input.KeyCode == Enum.KeyCode.C then
-            toggleStatsWindow()
-        end
-    end)
-
-    -- Arrastrar la ventana
-    local dragging = false
-    local dragStart
-    local startPos
-
-    statsFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = statsFrame.Position
-        end
-    end)
-
-    statsFrame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            if dragging then
-                local delta = input.Position - dragStart
-                statsFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            end
-        end
-    end)
-
-    statsFrame.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-
-    -- Suscribirse a eventos
-    Comm.Client:On("UpdateStats", updateStatsUI)
-
-    -- Pedir stats iniciales al servidor
-    Comm.Client:Fire("RequestInitialStats")
-
-    -- Estado inicial
-    statsGui.Enabled = false
+-- Función para abrir/cerrar la ventana
+function StatsController:Toggle()
+	statsGui.Enabled = not statsGui.Enabled
 end
 
 return StatsController

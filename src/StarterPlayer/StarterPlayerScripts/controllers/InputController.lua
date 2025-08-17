@@ -2,14 +2,13 @@
 	InputController.lua
 	Controlador para toda la entrada del jugador (teclado y ratón).
 	Gestiona ataques, uso de habilidades, selección de skills y cámara.
-	Ubicación: StarterPlayer/StarterPlayerScripts/controllers/
 ]]
 
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
--- Módulos compartidos
+-- Módulos
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local SkillConfig = require(ReplicatedStorage.Shared.config.SkillConfig)
 
@@ -20,9 +19,11 @@ local InputController = {}
 InputController.TargetingController = nil
 InputController.SkillBarController = nil
 InputController.AnimationController = nil
+InputController.StatsController = nil
 
 local cameraMode = 1 -- 1: Default, 2: Locked, 3: First Person
 
+-- Lógica completa de la cámara
 local function updateCameraMode()
 	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
@@ -47,13 +48,22 @@ function InputController:Start(controllers)
 	self.TargetingController = controllers.TargetingController
 	self.SkillBarController = controllers.SkillBarController
 	self.AnimationController = controllers.AnimationController
+	self.StatsController = controllers.StatsController
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		-- La tecla X para la cámara debe funcionar siempre
-		if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.X then
-			cameraMode = (cameraMode % 3) + 1
-			updateCameraMode()
-			return
+		-- Lógica de teclado que debe funcionar siempre
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+			if input.KeyCode == Enum.KeyCode.X then
+				cameraMode = (cameraMode % 3) + 1
+				updateCameraMode()
+				return
+			end
+			if input.KeyCode == Enum.KeyCode.C then
+				if self.StatsController then
+					self.StatsController:Toggle()
+				end
+				return
+			end
 		end
 
 		if gameProcessed or not self.AnimationController:IsReadyForCombat() then return end
@@ -77,7 +87,6 @@ function InputController:Start(controllers)
 					self.TargetingController:SetTarget(target.Parent)
 					local currentTarget = self.TargetingController:GetCurrentTarget()
 					
-					-- Comprobar rango
 					local distance = (player.Character.PrimaryPart.Position - currentTarget.PrimaryPart.Position).Magnitude
 					if distance <= skillData.MaxRange then
 						Remotes.RequestSkillUse:FireServer(selectedSkillId, currentTarget)
