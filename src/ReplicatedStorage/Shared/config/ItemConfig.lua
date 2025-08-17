@@ -1,56 +1,64 @@
 --[[
-    Archivo: ItemConfig.lua
-    Tipo: ModuleScript
-    Ubicacion: ReplicatedStorage/Shared/
-    Descripcion: Catalogo central de todos los items del juego.
---]]
+	ItemConfig.lua
+	Base de datos de todos los ítems del juego.
+	Define las propiedades, estadísticas y comportamiento de cada ítem.
+	Ubicación: ReplicatedStorage/Shared/config/
+]]
 
-local ItemConfig = {
-    -- Armas
-    SWORD_01 = {
-        Name = "Short Sword",
-        Type = "Weapon", -- Corresponde al nombre del Slot en la GUI
-        Description = "A basic sword for beginners.",
-        ImageId = "rbxassetid://1234567890", -- Placeholder
-        Level = 1,
+return {
+	-- EJEMPLOS DE ÍTEMS --
 
-        -- Stats del Item
-        MinDmg = 5,
-        MaxDmg = 10,
-        AttackSpeed = 10,
+	-- Armas
+	["ShortSword"] = {
+		Name = "Short Sword",
+		Description = "A basic sword for beginners.",
+		Slot = "Weapon", -- A qué parte del equipo pertenece
+		Stats = {
+			MinDamage = 5,
+			MaxDamage = 10,
+		},
+		AccessoryId = "rbxassetid://YOUR_SWORD_MESH_ID", -- ID del accesorio para mostrarlo
+	},
+	["SmallAxe"] = {
+		Name = "Small Axe",
+		Description = "A simple axe.",
+		Slot = "Weapon",
+		Stats = {
+			MinDamage = 7,
+			MaxDamage = 12,
+		},
+		AccessoryId = "rbxassetid://YOUR_AXE_MESH_ID",
+	},
 
-        -- Requisitos
-        ReqClass = "Dark Knight",
-        ReqStats = {
-            Strength = 20,
-            Agility = 15,
-        }
-    },
-
-    -- Armaduras
-    HELMET_01 = {
-        Name = "Bronze Helm",
-        Type = "Helmet", -- Corresponde al nombre del Slot en la GUI
-        Description = "A sturdy bronze helmet.",
-        ImageId = "rbxassetid://0987654321", -- Placeholder
-        Level = 3,
-
-        -- Stats del Item
-        Defense = 8,
-        
-        -- Requisitos
-        ReqClass = "Dark Knight",
-        ReqStats = {
-            Strength = 30,
-        }
-    },
-
-    POTION_HP_01 = {
-        Name = "Small HP Potion",
-        Type = "Consumable",
-        Description = "Recovers a small amount of HP.",
-        ImageId = "rbxassetid://1122334455", -- Placeholder
-    },
+	-- Armaduras
+	["LeatherHelmet"] = {
+		Name = "Leather Helmet",
+		Description = "Basic head protection.",
+		Slot = "Helmet",
+		Stats = {
+			Defense = 5,
+		},
+		AccessoryId = "rbxassetid://YOUR_HELMET_MESH_ID",
+	},
+	["LeatherArmor"] = {
+		Name = "Leather Armor",
+		Description = "A simple leather tunic.",
+		Slot = "Armor",
+		Stats = {
+			Defense = 10,
+		},
+		-- No necesita AccessoryId si la armadura se aplica con texturas
+	},
+	
+	-- Consumibles (Ejemplo a futuro)
+	["SmallHealthPotion"] = {
+		Name = "Small Health Potion",
+		Description = "Restores a small amount of health.",
+		Slot = nil, -- No se equipa
+		Consumable = true,
+		Effect = {
+			Type = "Heal",
+			Amount = 50,
+		},
+	},
 }
-
-return ItemConfig

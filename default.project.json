@@ -1,45 +1,18 @@
 {
-  "name": "Mu Roblox",
+  "name": "MuColaboradores",
   "tree": {
     "$className": "DataModel",
 
-    "HttpService": {
-      "$className": "HttpService",
-      "$properties": {
-        "HttpEnabled": true
-      }
-    },
-
     "ReplicatedStorage": {
-      "Shared": {
-        "$path": "src/ReplicatedStorage/Shared"
-      }
+      "$path": "src/ReplicatedStorage"
     },
 
     "ServerScriptService": {
-      "$className": "ServerScriptService",
-      "$path": "src/ServerScriptService",
-      "core": {
-        "$className": "Folder",
-        "mock_data": {
-          "$path": "src/ServerScriptService/core/mock_data.lua"
-        },
-        "player_data_manager": {
-          "$path": "src/ServerScriptService/core/player_data_manager.lua"
-        }
-      },
-      "Modules": {
-        "$className": "Folder",
-        "inventory_manager": {
-          "$path": "src/ServerScriptService/Modules/inventory_manager.lua"
-        }
-      }
+      "$path": "src/ServerScriptService"
     },
 
     "StarterPlayer": {
-      "$className": "StarterPlayer",
       "StarterPlayerScripts": {
-        "$className": "StarterPlayerScripts",
         "$path": "src/StarterPlayer/StarterPlayerScripts"
       }
     }

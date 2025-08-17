@@ -1,171 +1,147 @@
 --[[
-	Archivo: CharacterHandler.lua
-	Tipo: Script
-	Ubicacin: ServerScriptService/
-	Descripcin: Gestiona la aparicin de los personajes personalizados.
+	CharacterHandler.lua
+	Servicio que maneja eventos y lógica directamente relacionados con el modelo del personaje.
+	Gestiona la carga de modelos de personaje personalizados, la muerte y la reaparición.
+	Ubicación: ServerScriptService/services/
 ]]
 
 local Players = game:GetService("Players")
-local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
+local ServerStorage = game:GetService("ServerStorage")
 
-	local function safeRequireServer(pathParts)
-		local current = ServerScriptService
-		for _, part in ipairs(pathParts) do
-			current = current:FindFirstChild(part) or current:WaitForChild(part, 5)
-			if not current then
-				warn("[CharacterHandler] No se encontró: " .. table.concat(pathParts, "."))
-				return nil
-			end
-		end
-		-- Si lo encontrado no es un ModuleScript, buscar entre descendientes o en todo ServerScriptService
-		if not current:IsA("ModuleScript") then
-			local found = nil
-			for _, d in ipairs(current:GetDescendants()) do
-				if d:IsA("ModuleScript") and d.Name == pathParts[#pathParts] then
-					found = d
-					break
-				end
-			end
-			if not found then
-				for _, d in ipairs(ServerScriptService:GetDescendants()) do
-					if d:IsA("ModuleScript") and d.Name == pathParts[#pathParts] then
-						found = d
-						break
-					end
-				end
-			end
-			if found then
-				current = found
-			else
-				warn("[CharacterHandler] Objeto encontrado no es ModuleScript: " .. tostring(current.Name))
-				return nil
-			end
-		end
-		local ok, res = pcall(require, current)
-		if not ok then warn("[CharacterHandler] Error al require: ", res) return nil end
-		return res
-	end
+-- Módulos
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local ItemConfig = require(ReplicatedStorage.Shared.config.ItemConfig)
 
-	local DataManager = safeRequireServer({"core", "player_data_manager"})
+local CharacterHandler = {}
 
-local function safeRequireShared(name)
-	local shared = ReplicatedStorage:FindFirstChild("Shared") or ReplicatedStorage:WaitForChild("Shared", 5)
-	if not shared then warn("[CharacterHandler] ReplicatedStorage.Shared no disponible") return nil end
-	local module = shared:FindFirstChild(name) or shared:WaitForChild(name, 5)
-	if not module then warn("[CharacterHandler] Módulo '"..name.."' no encontrado en Shared") return nil end
-	local ok, res = pcall(require, module)
-	if not ok then warn("[CharacterHandler] Error al require: ", res) return nil end
-	return res
+-- ATRIBUTOS DEL SERVICIO
+CharacterHandler.PlayerDataService = nil
+CharacterHandler.connections = {} -- Para guardar las conexiones de cada personaje
+CharacterHandler.isLoadingCharacter = {} -- Cerrojo para evitar cargas múltiples
+
+-- MÉTODOS
+function CharacterHandler:Init()
+	-- No se necesita nada en la inicialización
 end
 
-	local Comm = safeRequireShared("comm")
+function CharacterHandler:Start(ServiceManager)
+	-- Obtenemos referencias a otros servicios
+	self.PlayerDataService = ServiceManager:GetService("PlayerDataService")
 
-	if not DataManager then warn("[CharacterHandler] player_data_manager no disponible, funciones dependientes quedaran inactivas.") end
-	if not Comm or not Comm.Server then warn("[CharacterHandler] Comm no disponible; eventos no seran enviados.") end
+	Players.PlayerAdded:Connect(function(player)
+		self.isLoadingCharacter[player] = false
+		-- Conectamos una función que se ejecutará CADA VEZ que el personaje del jugador aparezca
+		player.CharacterAdded:Connect(function(character)
+			self:_onCharacterAdded(player, character)
+		end)
+	end)
 
-local isLoadingCharacter = {}
+	Players.PlayerRemoving:Connect(function(player)
+		-- Limpiamos las conexiones y el cerrojo cuando el jugador se va
+		self.isLoadingCharacter[player] = nil
+		if self.connections[player] then
+			for _, connection in ipairs(self.connections[player]) do
+				connection:Disconnect()
+			end
+			self.connections[player] = nil
+		end
+	end)
 
-local function onCharacterDied(player)
-	print(player.Name, "ha muerto. Reaparecer en 5 segundos.")
+	print("[CharacterHandler] Listo y escuchando apariciones de personajes.")
+end
+
+-- Se ejecuta cada vez que un personaje (re)aparece en el juego
+function CharacterHandler:_onCharacterAdded(player, character)
+	if self.isLoadingCharacter[player] then return end
+	self.isLoadingCharacter[player] = true
+
+	-- Esperamos un momento para que PlayerDataService cargue el perfil
+	task.wait(0.5)
+	local playerData = self.PlayerDataService:GetData(player)
+
+	if not playerData or not playerData.PlayerClass or playerData.PlayerClass == "Default" then
+		print(`[CharacterHandler] Jugador {player.Name} con clase Default. Usando personaje estándar.`)
+		self.isLoadingCharacter[player] = false
+		return
+	end
+
+	print(`[CharacterHandler] Perfil encontrado para {player.Name}. Cargando modelo de clase: {playerData.PlayerClass}`)
+	
+	local characterModel = ServerStorage:FindFirstChild(playerData.PlayerClass)
+	if not characterModel then
+		warn(`[CharacterHandler] No se encontró el modelo para la clase: {playerData.PlayerClass}`)
+		self.isLoadingCharacter[player] = false
+		return
+	end
+
+	-- Destruimos el personaje anterior y lo reemplazamos con el modelo de clase
+	character:Destroy()
+	local newCharacter = characterModel:Clone()
+	newCharacter.Name = player.Name
+	player.Character = newCharacter
+	
+	local humanoid = newCharacter:WaitForChild("Humanoid")
+	humanoid.DisplayName = player.DisplayName
+	
+	-- Conectamos el evento de muerte del nuevo personaje
+	self:_setupCharacterConnections(player, newCharacter)
+	
+	-- Equipamos los accesorios visuales al nuevo modelo
+	self:UpdateCharacterAppearance(player, newCharacter)
+	
+	newCharacter.Parent = workspace
+	self.isLoadingCharacter[player] = false
+end
+
+-- Configura las conexiones para un personaje recién creado
+function CharacterHandler:_setupCharacterConnections(player, character)
+	-- Limpiamos conexiones antiguas para este jugador
+	if self.connections[player] then
+		for _, connection in ipairs(self.connections[player]) do
+			connection:Disconnect()
+		end
+	end
+	self.connections[player] = {}
+
+	local humanoid = character:WaitForChild("Humanoid")
+
+	-- Conectamos el evento de muerte
+	local diedConnection = humanoid.Died:Connect(function()
+		self:_onCharacterDied(player)
+	end)
+	table.insert(self.connections[player], diedConnection)
+end
+
+-- Se ejecuta cuando el humanoide del personaje muere
+function CharacterHandler:_onCharacterDied(player)
+	print(`[CharacterHandler] El personaje de {player.Name} ha muerto.`)
+	
+	-- Aquí iría la lógica de penalización por muerte
+	
 	task.wait(5)
 	if player and player:IsDescendantOf(Players) then
-		isLoadingCharacter[player] = false -- Liberamos el cerrojo para permitir la reaparicin.
+		self.isLoadingCharacter[player] = false -- Liberamos el cerrojo para permitir reaparición
 		player:LoadCharacter()
 	end
 end
 
-local function onCharacterAdded(character, player)
-	if isLoadingCharacter[player] then return end
-	isLoadingCharacter[player] = true
+-- Función pública para actualizar la apariencia del personaje (añadir accesorios)
+function CharacterHandler:UpdateCharacterAppearance(player, character)
+	local playerData = self.PlayerDataService:GetData(player)
+	if not playerData or not playerData.Equipment then return end
 
-	if not DataManager then
-		warn("[CharacterHandler] onCharacterAdded: DataManager no disponible para " .. player.Name)
-		isLoadingCharacter[player] = false
-		return
-	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
 
-	local profile = DataManager:GetProfile(player)
-	local wait_cycles = 0
-	while not profile and wait_cycles < 20 do
-		print("[CharacterHandler] El perfil de", player.Name, "an no est listo, esperando...")
-		task.wait(0.5)
-		profile = DataManager:GetProfile(player)
-		wait_cycles = wait_cycles + 1
-	end
-
-	if not profile then
-		warn("[CharacterHandler] No se pudo obtener el perfil de", player.Name, "despus de esperar.")
-		isLoadingCharacter[player] = false
-		return
-	end
-
-	if profile.Data.Clase == "Default" then
-		print("[CharacterHandler] Jugador con clase 'Default'. Omitiendo carga de modelo personalizado.")
-		isLoadingCharacter[player] = false
-		return
-	end
-
-	print("[CharacterHandler] Perfil encontrado. Cargando modelo de clase:", profile.Data.Clase)
-
-	character:Destroy()
-
-	local characterModel = ServerStorage:FindFirstChild(profile.Data.Clase)
-	if not characterModel then
-		warn("[CharacterHandler] No se encontr el modelo para la clase:", profile.Data.Clase)
-		isLoadingCharacter[player] = false
-		return
-	end
-
-	local newCharacter = characterModel:Clone()
-	newCharacter.Name = player.Name
-	player.Character = newCharacter
-	newCharacter.Parent = workspace -- Parentamos el personaje antes de configurar el Humanoide.
-
-	local humanoid = newCharacter:WaitForChild("Humanoid", 5) -- Aadimos un tiempo de espera de 5s
-
-	-- == CORRECCIN CLAVE ==
-	-- Enviamos los datos al HUD INMEDIATAMENTE despus de cargar el personaje.
-	-- Esto asegura que la UI se actualice incluso si hay problemas con el Humanoide.
-	local derivedStats = profile.DerivedStats or {}
-	if Comm and Comm.Server then
-		Comm.Server:Fire(player, "InitialStatsUpdate", {
-		Nivel = profile.Data.Nivel,
-		Clase = profile.Data.Clase,
-			MaxHP = derivedStats.MaxHP,
-			CurrentHP = derivedStats.MaxHP,
-			MaxMP = derivedStats.MaxMP,
-			CurrentMP = derivedStats.MaxMP,
-		Zen = profile.Data.Zen,
-		Skills = profile.Data.Skills,
-		CurrentEXP = profile.Data.Experiencia,
-		MaxEXP = 1000 -- Placeholder: Deberas calcular esto basado en el nivel
-	})
-	else
-		warn("[CharacterHandler] Comm.Server no disponible, no se pudo enviar InitialStatsUpdate para " .. player.Name)
-	end
-
-	if humanoid then
-		-- Si el Humanoide se encontr, configuramos su vida y muerte.
-		humanoid.MaxHealth = derivedStats.MaxHP
-		humanoid.Health = derivedStats.MaxHP
-
-		humanoid.Died:Connect(function()
-			onCharacterDied(player)
-		end)
-	else
-		warn("[CharacterHandler] No se encontr un Humanoide en el modelo", newCharacter.Name, "despus de 5 segundos.")
+	-- Lógica para añadir/quitar accesorios (armadura, cascos, etc.)
+	for slot, itemInstance in pairs(playerData.Equipment) do
+		local itemData = ItemConfig[itemInstance.itemId]
+		if itemData and itemData.AccessoryId then
+			-- Lógica para encontrar el accesorio y clonarlo
+			-- Ejemplo: humanoid:AddAccessory(accessoryClone)
+		end
 	end
 end
 
-Players.PlayerAdded:Connect(function(player)
-	isLoadingCharacter[player] = false
-	player.CharacterAdded:Connect(function(character)
-		onCharacterAdded(character, player)
-	end)
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-	isLoadingCharacter[player] = nil
-end)
+return CharacterHandler

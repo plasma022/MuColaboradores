@@ -1,149 +1,110 @@
 --[[
-    Archivo: ClassSelectionService.lua
-    Tipo: Script
-    Ubicacin: ServerScriptService/
-    Descripcin: Maneja la lgica del servidor para la seleccin de clases.
---]]
+	ClassService.lua
+	Servicio que maneja la selección de clase de los jugadores.
+	Ubicación: ServerScriptService/services/
+]]
 
-local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
-local function safeRequireShared(name)
-	local shared = ReplicatedStorage:FindFirstChild("Shared") or ReplicatedStorage:WaitForChild("Shared", 5)
-	if not shared then warn("[ClassSelection] ReplicatedStorage.Shared no disponible") return nil end
-	local module = shared:FindFirstChild(name) or shared:WaitForChild(name, 5)
-	if not module then warn("[ClassSelection] Módulo '"..name.."' no encontrado en Shared") return nil end
-	local ok, res = pcall(require, module)
-	if not ok then warn("[ClassSelection] Error al require: ", res) return nil end
-	return res
+-- Módulos
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local ClassConfig = require(ReplicatedStorage.Shared.config.ClassConfig) -- Asumiendo que tienes este módulo
+
+local ClassService = {}
+
+-- ATRIBUTOS DEL SERVICIO
+ClassService.PlayerDataService = nil
+ClassService.StatsService = nil
+ClassService.InventoryService = nil
+
+-- MÉTODOS
+function ClassService:Init()
+	-- No se necesita nada en la inicialización
 end
 
-local function safeRequireServer(folderName, moduleName)
-	local folder = ServerScriptService:FindFirstChild(folderName) or ServerScriptService:WaitForChild(folderName, 5)
-	if not folder then warn("[ClassSelection] Carpeta '"..folderName.."' no encontrada en ServerScriptService") return nil end
-	local module = folder:FindFirstChild(moduleName) or folder:FindFirstChildWhichIsA("ModuleScript") or folder:WaitForChild(moduleName, 5)
-	if not module then warn("[ClassSelection] Módulo '"..moduleName.."' no encontrado en "..folderName) return nil end
-	if not module:IsA("ModuleScript") then
-		-- Intentar encontrar un ModuleScript dentro
-		local childModule = module:FindFirstChildWhichIsA("ModuleScript") or folder:FindFirstChild(moduleName)
-		if childModule and childModule:IsA("ModuleScript") then
-			module = childModule
-		else
-			warn("[ClassSelection] Objeto encontrado no es ModuleScript: " .. tostring(module.Name))
-			return nil
-		end
-	end
-	local ok, res = pcall(require, module)
-	if not ok then warn("[ClassSelection] Error al require server: ", res) return nil end
-	return res
-end
+function ClassService:Start(ServiceManager)
+	-- Obtenemos referencias a otros servicios
+	self.PlayerDataService = ServiceManager:GetService("PlayerDataService")
+	self.StatsService = ServiceManager:GetService("StatsService")
+	self.InventoryService = ServiceManager:GetService("InventoryService")
 
-local DataManager = safeRequireServer("core", "player_data_manager")
-local Comm = safeRequireShared("comm")
-local CharacterFormulas = safeRequireShared("character_formulas")
-
-if not DataManager then
-	warn("[ClassSelection] Objeto encontrado no es ModuleScript: player_data_manager or failed to require it. Operaciones dependientes quedaran inactivas.")
-end
-if not Comm then
-	warn("[ClassSelection] Comm no disponible; operaciones de GUI no se podrán disparar.")
-end
-
--- Diccionario con los datos iniciales de cada clase para una transicin fcil.
-local CLASS_STARTING_DATA = {
-	["DarkKnight"] = {
-		-- == CORRECCIN CLAVE: Ahora se asignan los stats con los nombres correctos ==
-		EstadisticasBase = {
-			Fuerza = CharacterFormulas.CLASS_BASE_STATS["DarkKnight"].Fuerza,
-			Agilidad = CharacterFormulas.CLASS_BASE_STATS["DarkKnight"].Agilidad,
-			Vitalidad = CharacterFormulas.CLASS_BASE_STATS["DarkKnight"].Vitalidad,
-			Energia = CharacterFormulas.CLASS_BASE_STATS["DarkKnight"].Energia,
-		},
-		Skills = {"Cyclone", "TwistingSlash", "Inner", "DeathStab"}
-	},
-	["DarkWizard"] = {
-		EstadisticasBase = {
-			Fuerza = CharacterFormulas.CLASS_BASE_STATS["DarkWizard"].Fuerza,
-			Agilidad = CharacterFormulas.CLASS_BASE_STATS["DarkWizard"].Agilidad,
-			Vitalidad = CharacterFormulas.CLASS_BASE_STATS["DarkWizard"].Vitalidad,
-			Energia = CharacterFormulas.CLASS_BASE_STATS["DarkWizard"].Energia,
-		},
-		Skills = {"EnergyBall", "EvilSpirit", "ManaShield", "IceStorm"}
-	},
-	["FairyElf"] = {
-		EstadisticasBase = {
-			Fuerza = CharacterFormulas.CLASS_BASE_STATS["FairyElf"].Fuerza,
-			Agilidad = CharacterFormulas.CLASS_BASE_STATS["FairyElf"].Agilidad,
-			Vitalidad = CharacterFormulas.CLASS_BASE_STATS["FairyElf"].Vitalidad,
-			Energia = CharacterFormulas.CLASS_BASE_STATS["FairyElf"].Energia,
-		},
-		Skills = {"TripleShot", "GreaterDefense", "GreaterDamage", "IceShot"}
-	}
-}
-
--- Escuchamos el evento que enva el cliente desde la GUI de seleccin.
-if Comm and Comm.Server and DataManager then
-	Comm.Server:On("SelectClass", function(player, selectedClass)
-		local profile = DataManager:GetProfile(player)
-		if not profile or profile.Data.Clase ~= "Default" then
-			return
-		end
-
-	local classData = CLASS_STARTING_DATA[selectedClass]
-	if not classData then
-		warn("El jugador", player.Name, "intent seleccionar una clase invlida:", selectedClass)
-		return
-	end
-
-	-- Actualizamos el perfil del jugador con los datos de la nueva clase.
-	profile.Data.Clase = selectedClass
-	profile.Data.EstadisticasBase = classData.EstadisticasBase
-	profile.Data.Skills = classData.Skills
-	profile.Data.PuntosDeStatsDisponibles = 0
-
-	DataManager:CalculateDerivedStats(profile)
-    DataManager:sendFullStatsToClient(player)
-
-	print("[ClassSelection] El jugador", player.Name, "ha seleccionado la clase:", selectedClass)
-
-	player:LoadCharacter()
+	-- Conectamos el RemoteEvent para que el cliente pueda solicitar elegir una clase
+	Remotes.SelectClass.OnServerEvent:Connect(function(player, classId)
+		self:_onSelectClass(player, classId)
 	end)
-else
-	warn("[ClassSelection] No se registró SelectClass porque Comm o DataManager no están disponibles.")
+
+	-- Conectamos la lógica para revisar la clase de un jugador cuando entra
+	Players.PlayerAdded:Connect(function(player)
+		-- Esperamos un poco para asegurarnos de que el perfil del jugador esté cargado
+		task.wait(1) 
+		self:_checkPlayerClass(player)
+	end)
+
+	print("[ClassService] Listo y escuchando peticiones de selección de clase.")
 end
 
--- Esta funcin revisa si el jugador necesita elegir una clase al entrar.
-local function checkPlayerClass(player)
-	print("[ClassSelection] Revisando la clase para el jugador:", player.Name)
-	if not DataManager then
-		warn("[ClassSelection] checkPlayerClass: DataManager no disponible; omitiendo comprobacion para " .. player.Name)
+-- Función privada que se ejecuta cuando un jugador elige una clase
+function ClassService:_onSelectClass(player, classId)
+	local playerData = self.PlayerDataService:GetData(player)
+	if not playerData then return end
+
+	-- 1. Validar que el jugador no tenga ya una clase
+	if playerData.PlayerClass and playerData.PlayerClass ~= "Default" then
+		warn(`[ClassService] El jugador {player.Name} intentó elegir una clase teniendo ya una.`)
 		return
 	end
 
-	local profile = DataManager:GetProfile(player)
-	local wait_cycles = 0
-
-	while not profile and wait_cycles < 10 do
-		print("[ClassSelection] El perfil de", player.Name, "no est listo, esperando...")
-		task.wait(0.5)
-		profile = DataManager:GetProfile(player)
-		wait_cycles = wait_cycles + 1
-	end
-
-	if not profile then
-		warn("[ClassSelection] Tiempo de espera agotado para el perfil de:", player.Name)
+	-- 2. Validar que la clase elegida exista en la configuración
+	local classData = ClassConfig[classId]
+	if not classData then
+		warn(`[ClassService] El jugador {player.Name} intentó elegir una clase inexistente: {classId}`)
 		return
 	end
 
-	print("[ClassSelection] Perfil encontrado. La clase actual es:", profile.Data.Clase)
+	-- 3. Asignar la clase y los stats iniciales
+	playerData.PlayerClass = classId
+	playerData.Stats = classData.BaseStats -- Asignamos los stats base de la clase
 
-	if profile.Data.Clase == "Default" then
-		print("[ClassSelection] La clase es 'Default'. Mostrando la GUI de seleccin.")
-		Comm.Server:Fire(player, "ShowClassSelection")
+	-- 4. Otorgar ítems y habilidades iniciales
+	if classData.StartingItems then
+		for _, itemId in ipairs(classData.StartingItems) do
+			self.InventoryService:AddItem(player, itemId, 1)
+		end
+	end
+	
+	if classData.StartingSkills then
+		playerData.Skills = classData.StartingSkills
+	end
+
+	-- 5. Recalcular todos los stats derivados con los nuevos stats base
+	self.StatsService:RecalculateDerivedStats(player)
+
+	-- 6. Notificar al cliente que todo se actualizó para que pueda cerrar la UI de selección
+	Remotes.PlayerStatUpdate:FireClient(player, playerData)
+	
+	print(`[ClassService] El jugador {player.Name} ha elegido la clase: {classId}`)
+	
+	-- Recargamos el personaje para que los cambios visuales (ítems) se apliquen
+	player:LoadCharacter()
+end
+
+-- Función para revisar si el jugador necesita elegir una clase al entrar.
+function ClassService:_checkPlayerClass(player)
+	local playerData = self.PlayerDataService:GetData(player)
+
+	if not playerData then
+		warn(`[ClassService] No se pudo revisar la clase para {player.Name} porque no se encontraron sus datos.`)
+		return
+	end
+
+	-- Si la clase es nil o "Default", le pedimos al cliente que muestre la UI de selección
+	if not playerData.PlayerClass or playerData.PlayerClass == "Default" then
+		print(`[ClassService] El jugador {player.Name} necesita elegir una clase.`)
+		Remotes.ShowClassSelection:FireClient(player)
 	else
-		print("[ClassSelection] El jugador ya tiene una clase. Omitiendo GUI.")
+		print(`[ClassService] El jugador {player.Name} ya tiene la clase: {playerData.PlayerClass}`)
 	end
 end
 
-Players.PlayerAdded:Connect(checkPlayerClass)
+return ClassService

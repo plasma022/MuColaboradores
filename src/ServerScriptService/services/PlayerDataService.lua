@@ -1,135 +1,112 @@
 --[[
-    Archivo: PlayerDataManager.lua
-    Tipo: ModuleScript
-    Ubicacion: ServerScriptService/
-    Descripcion: Maneja el guardado y carga de datos de jugadores, y calcula sus stats totales.
---]]
+	PlayerDataService.lua
+	Servicio fundamental que gestiona la carga y el guardado de los datos de los jugadores.
+	Utiliza ProfileService para garantizar la seguridad de los datos.
+	Ubicación: ServerScriptService/services/
+]]
 
 local Players = game:GetService("Players")
-local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local ServerScriptService = game:GetService("ServerScriptService")
 
-local IS_STUDIO = RunService:IsStudio()
+-- Módulos
+local ProfileService = require(ReplicatedStorage.lib.ProfileService)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
+-- Añade aquí los require a los configs que necesites, ej:
+-- local PlayerConfig = require(ReplicatedStorage.Shared.config.PlayerConfig)
 
--- Modulos requeridos
-local ProfileService = require(game:GetService("ServerScriptService").lib.profile_service)
-local InventoryManager = require(ServerScriptService.Modules.inventory_manager) -- Required InventoryManager here
+local PlayerDataService = {}
 
-local DataManager = {} -- Define the DataManager table
-DataManager.Profiles = {} -- Initialize Profiles table within DataManager
+-- CONFIGURACIÓN
+local PROFILE_STORE_NAME = "PlayerData" -- Cambia esto si quieres empezar de cero los datos
+local PROFILE_TEMPLATE = {
+	-- Perfil básico que se le da a un jugador nuevo
+	Nivel = 1,
+	Zen = 0,
+	CurrentEXP = 0,
+	MaxEXP = 100, -- Debería venir de un config de niveles
+	CurrentHP = 100,
+	MaxHP = 100,
+	CurrentMP = 50,
+	MaxMP = 50,
+	Stats = {
+		STR = 5,
+		AGI = 5,
+		VIT = 5,
+		ENE = 5,
+	},
+	StatPoints = 0,
+	Skills = {},
+	Inventory = {},
+	Equipment = {},
+	PlayerClass = nil,
+}
 
-local function safeRequireShared(name)
-	local shared = ReplicatedStorage:FindFirstChild("Shared") or ReplicatedStorage:WaitForChild("Shared", 5)
-	if not shared then warn("[PlayerDataManager] ReplicatedStorage.Shared no disponible") return nil end
-	local module = shared:FindFirstChild(name) or shared:WaitForChild(name, 5)
-	if not module then warn("[PlayerDataManager] Módulo '"..name.."' no encontrado en Shared") return nil end
-	local ok, res = pcall(require, module)
-	if not ok then warn("[PlayerDataManager] Error al require: ", res) return nil end
-	return res
+-- ATRIBUTOS DEL SERVICIO
+PlayerDataService.Profiles = {} -- Caché para los perfiles de los jugadores conectados.
+PlayerDataService.StatsService = nil
+PlayerDataService.InventoryService = nil
+
+-- MÉTODOS
+function PlayerDataService:Init()
+	-- No se necesita nada en la inicialización para este servicio
 end
 
-local PlayerConfig = safeRequireShared("player_config")
-if not PlayerConfig then warn("[PlayerDataManager] PlayerConfig no disponible. Abortando.") return nil end
-local Formulas = safeRequireShared("character_formulas")
-if not Formulas then warn("[PlayerDataManager] Formulas no disponible. Abortando.") return nil end
-local Comm = safeRequireShared("comm")
-if not Comm then warn("[PlayerDataManager] Comm no disponible. Abortando.") return nil end
+function PlayerDataService:Start(ServiceManager)
+	-- Obtenemos referencias a otros servicios que necesitaremos
+	self.StatsService = ServiceManager:GetService("StatsService")
+	self.InventoryService = ServiceManager:GetService("InventoryService")
 
--- Mover safeRequireServer aquí, fuera de la función onPlayerAdded
-local function safeRequireServer(pathParts)
-	local current = ServerScriptService
-	for _, part in ipairs(pathParts) do
-		current = current:FindFirstChild(part) or current:WaitForChild(part, 5)
-		if not current then
-			warn("[PlayerDataManager] No se encontró: " .. table.concat(pathParts, "."))
-			return nil
-		end
-		end
-	local ok, res = pcall(require, current)
-	if not ok then warn("[PlayerDataManager] Error al require: ", res) return nil end
-	return res
+	-- Conectamos los eventos de entrada y salida de jugadores
+	Players.PlayerAdded:Connect(function(player)
+		self:_onPlayerAdded(player)
+	end)
+	
+	Players.PlayerRemoving:Connect(function(player)
+		self:_onPlayerRemoving(player)
+	end)
+
+	print("[PlayerDataService] Listo y escuchando jugadores.")
 end
 
-function DataManager:onPlayerAdded(player) -- Make onPlayerAdded a method of DataManager
-    if not player or not player:IsA("Player") then -- Añadir esta verificación
-        warn("[PlayerDataManager] onPlayerAdded llamado con un objeto 'player' inválido o nulo. Abortando.")
-        return
-    end
-	local profile
-
-	if IS_STUDIO then
-		-- MockData está en ServerScriptService.core.mock_data
-		local MockData = safeRequireServer({"core", "mock_data"})
-		profile = MockData.LoadProfileAsync(player)
-	else
-        -- ... (codigo de carga de ProfileService sin cambios) ...
-	end
+function PlayerDataService:_onPlayerAdded(player)
+	local profileStore = ProfileService.GetProfileStore(PROFILE_STORE_NAME, PROFILE_TEMPLATE)
+	local profile = profileStore:LoadProfileAsync("Player_" .. player.UserId)
 
 	if profile then
 		profile:AddUserId(player.UserId)
-		profile:Reconcile()
+		profile:Reconcile() -- Rellena los datos que falten en el perfil del jugador con la plantilla
 
 		profile:ListenToRelease(function()
-			DataManager.Profiles[player] = nil -- Use DataManager.Profiles
-			player:Kick("Tu perfil ha sido liberado. Por favor, unete de nuevo.")
+			self.Profiles[player] = nil
+			player:Kick("Se ha cargado tu perfil desde otra sesión. Por favor, vuelve a unirte.")
 		end)
 
 		if player:IsDescendantOf(Players) then
-			DataManager.Profiles[player] = profile -- Use DataManager.Profiles
-            
-			-- --- INICIALIZACION DE MODULOS ---
-			-- Se asegura que el inventario del jugador este inicializado.
-			if InventoryManager then
-				InventoryManager.InitializeInventory(profile)
-				-- Se inicializan los bonus de items en una tabla vacia.
-				profile.ItemBonuses = InventoryManager.GetTotalEquippedStats(profile) or {}
-			else
-				profile.ItemBonuses = {}
-				warn("[PlayerDataManager] InventoryManager no disponible para inicializar inventario de " .. player.Name)
-			end
-
-			DataManager:CalculateDerivedStats(profile) -- Call as method
-			print("Perfil cargado para", player.Name)
+			self.Profiles[player] = profile
+			print(`[PlayerDataService] Perfil cargado para {player.Name}`)
+			-- Aquí es donde le envías los datos iniciales al cliente
+			Remotes.PlayerStatUpdate:FireClient(player, profile.Data)
 		else
 			profile:Release()
 		end
 	else
-		warn("No se pudo cargar el perfil para " .. player.Name .. ". Causa probable: Throttling de DataStore.")
-		player:Kick("No se pudo cargar tu perfil (servidor ocupado). Intenta de nuevo en unos minutos.")
+		player:Kick("No se pudo cargar tu perfil. Inténtalo de nuevo más tarde.")
 	end
 end
 
-function DataManager:onPlayerRemoving(player) -- Make onPlayerRemoving a method of DataManager
-	local profile = DataManager.Profiles[player] -- Use DataManager.Profiles
+function PlayerDataService:_onPlayerRemoving(player)
+	local profile = self.Profiles[player]
 	if profile then
 		profile:Release()
+		print(`[PlayerDataService] Perfil liberado para {player.Name}`)
 	end
 end
 
-function DataManager:CalculateDerivedStats(profile)
-    if not profile or not profile.Player then -- Añadir esta verificación
-        warn("[PlayerDataManager] CalculateDerivedStats llamado con un perfil o jugador inválido.")
-        return
-    end
-    -- Implement calculation of derived stats here
-    -- For now, it's a placeholder to prevent errors.
-    print("[PlayerDataManager] Calculando stats derivados para", profile.Player.Name)
-end
-
-function DataManager:GetProfile(player)
-    -- Placeholder for GetProfile implementation
-    -- This function should return the player's profile from DataManager.Profiles
-    return DataManager.Profiles[player]
-end
-
-function DataManager:sendFullStatsToClient(player)
-    -- Placeholder for sendFullStatsToClient implementation
-    -- This function should send the player's stats to the client using Comm
-    print("[PlayerDataManager] Enviando stats completos al cliente para", player.Name)
-    if Comm and Comm.Client and DataManager.Profiles[player] then
-        Comm.Client:Fire(player, "UpdateStats", DataManager.Profiles[player].Data.EstadisticasTotales)
-    end
+-- Función pública para obtener los datos de un jugador
+function PlayerDataService:GetData(player)
+	local profile = self.Profiles[player]
+	return profile and profile.Data
 end
 
 return PlayerDataService
