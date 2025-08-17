@@ -4,7 +4,8 @@
     "$className": "DataModel",
 
     "ReplicatedStorage": {
-      "$path": "src/ReplicatedStorage"
+      "$path": "src/ReplicatedStorage",
+      "$ignore": ["RemotesFolder"]
     },
 
     "ServerScriptService": {
